@@ -1,0 +1,362 @@
+import { Router, type Request, type Response, type NextFunction } from 'express';
+import path from 'node:path';
+import { config } from './config.js';
+import { createClient, deleteClient, effectiveKeys, getClient, getClientByKey, listClients, newKey, publicClient, saveClient } from './clients.js';
+import { DEPARTMENTS, EMAIL_STATUS, EMPLOYEE_RANGES, FUNDING, PER_PAGE, SENIORITY, enrichPerson, orgByDomain, planLimits, searchCompanies, searchPeople, type ApolloCtx } from './apollo.js';
+import { cleanFilters, cleanIntent, filtersActive, intentFilters, normDomain } from './rules.js';
+import { askIntent, draftProfile, fitLines, siteText, type LlmCtx } from './llm.js';
+import { sampleCompanies, sampleEnrich, sampleLookup, samplePeople } from './samples.js';
+import { draftNote, lpOf, lpReady, lpUrl, pushProspect, roleFromTitle, sizeBucket, testConnection } from './launchpad.js';
+import { pushCompanies, pushPeople } from './push.js';
+import { createFinder, describe, listFinders, nextRun, runAndSave, saveFinders } from './finders.js';
+import { usageCompute, usageRead } from './usage.js';
+import { clientDir, readJson, writeJson } from './store.js';
+import type { Client, Finder, Org, Person, Profile, RecentSearch } from './types.js';
+
+export const api = Router();
+
+/* ---- auth: a client cookie (access key) and an admin cookie (ADMIN_KEY) ---- */
+
+interface Ctx { client: Client; sample: boolean; live: boolean; apollo: ApolloCtx; llm: LlmCtx; useGpt: boolean }
+
+declare module 'express-serve-static-core' {
+  interface Request { piq?: Ctx; admin?: boolean }
+}
+
+/** Inside Launchpad's iframe the cookie must be SameSite=None + Secure; on plain http (local dev) that pair is refused, so fall back to Lax. */
+function cookieOpts(req: Request) {
+  const https = req.secure || config.publicUrl.startsWith('https://');
+  return { httpOnly: true, sameSite: (https ? 'none' : 'lax') as 'none' | 'lax', secure: https, path: '/', maxAge: 365 * 86400000 };
+}
+
+api.post('/auth/key', (req, res) => {
+  const key = String(req.body?.key || '');
+  const client = getClientByKey(key);
+  if (!client) return res.status(401).json({ error: 'That access key is not valid.' });
+  res.cookie('piq_client', key, cookieOpts(req));
+  res.json({ ok: true, client: publicClient(client) });
+});
+
+api.post('/auth/admin', (req, res) => {
+  const key = String(req.body?.key || '');
+  if (!config.adminKey || key !== config.adminKey) return res.status(401).json({ error: 'Wrong admin key.' });
+  res.cookie('piq_admin', key, cookieOpts(req));
+  res.json({ ok: true });
+});
+
+api.post('/auth/logout', (_req, res) => {
+  res.clearCookie('piq_client', { path: '/' });
+  res.clearCookie('piq_admin', { path: '/' });
+  res.json({ ok: true });
+});
+
+function isAdmin(req: Request): boolean {
+  const k = String(req.cookies?.piq_admin || '');
+  return !!config.adminKey && k === config.adminKey;
+}
+
+function clientFrom(req: Request): Client | null {
+  const asSlug = String(req.query.as || req.body?.as || '');
+  if (asSlug && isAdmin(req)) return getClient(asSlug);
+  return getClientByKey(String(req.cookies?.piq_client || ''));
+}
+
+function ctxFor(req: Request, client: Client, ctx: string): Ctx {
+  const keys = effectiveKeys(client);
+  const sample = req.query.sample === '1' || req.body?.sample === true || !keys.apollo;
+  const live = !sample;
+  return { client, sample, live, apollo: { slug: client.slug, key: keys.apollo, ctx }, llm: { slug: client.slug, ctx, key: keys.openai, model: keys.openaiModel }, useGpt: live && !!keys.openai };
+}
+
+function requireClient(ctxName: string) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const client = clientFrom(req);
+    if (!client) return res.status(401).json({ error: 'Sign in with your access key.' });
+    req.piq = ctxFor(req, client, ctxName);
+    next();
+  };
+}
+
+function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  if (!isAdmin(req)) return res.status(401).json({ error: 'Admin only.' });
+  req.admin = true;
+  next();
+}
+
+const wrap = (fn: (req: Request, res: Response) => Promise<unknown>) => (req: Request, res: Response, next: NextFunction) => { fn(req, res).catch(next); };
+
+/* ---- who am I ---- */
+
+api.get('/me', (req, res) => {
+  const client = clientFrom(req);
+  res.json({ client: client ? publicClient(client) : null, admin: isAdmin(req), sample: client ? ctxFor(req, client, 'me').sample : false });
+});
+
+api.get('/options', (_req, res) => {
+  res.json({ seniority: SENIORITY, departments: DEPARTMENTS, employee_ranges: EMPLOYEE_RANGES, email_status: EMAIL_STATUS, funding: FUNDING, per_page: PER_PAGE });
+});
+
+/* ---- recent searches ---- */
+
+const recentFile = (slug: string) => path.join(clientDir(slug), 'recent.json');
+function recentAdd(slug: string, r: RecentSearch): void {
+  const all = readJson<RecentSearch[]>(recentFile(slug), []).filter((x) => x.q.toLowerCase() !== r.q.toLowerCase());
+  all.unshift(r);
+  writeJson(recentFile(slug), all.slice(0, 30));
+}
+
+api.get('/recent', requireClient('recent'), (req, res) => {
+  res.json({ recent: readJson<RecentSearch[]>(recentFile(req.piq!.client.slug), []).slice(0, 12) });
+});
+
+/* ---- Ask: plain words in, leads out ---- */
+
+api.post('/ask', requireClient('research:ask'), wrap(async (req, res) => {
+  const { client, sample, live, apollo, llm, useGpt } = req.piq!;
+  const q = String(req.body?.q || '').trim().slice(0, 300);
+  if (!q) return res.status(400).json({ error: 'Type what leads you are looking for.' });
+  const page = Math.max(1, Number(req.body?.page) || 1);
+  const pp = PER_PAGE.includes(Number(req.body?.pp)) ? Number(req.body.pp) : 10;
+  const intent = await askIntent(llm, client.profile, q, useGpt);
+  const filters = intentFilters(intent);
+  const kind = intent.kind;
+  const result = kind === 'people' ? (live ? await searchPeople(apollo, filters, page, pp) : samplePeople(filters, page, pp)) : (live ? await searchCompanies(apollo, filters, page, pp) : sampleCompanies(filters, page, pp));
+  const fits = await fitLines(llm, client.profile, result.rows, intent, kind, useGpt);
+  if (live && page === 1) recentAdd(client.slug, { q, kind, total: result.total, t: Date.now() });
+  const warnings: string[] = [];
+  if (intent.error) warnings.push(`GPT could not read the request (${intent.error}); the built-in parser was used.`);
+  if (sample) warnings.push(!effectiveKeys(client).apollo ? 'No research key for this client yet: these are sample results.' : 'Sample mode: canned results, nothing is written.');
+  res.json({ q, intent, filters, kind, result, fits, warnings, sample });
+}));
+
+/* ---- the filter tabs ---- */
+
+api.post('/search', requireClient('research:people'), wrap(async (req, res) => {
+  const { live, apollo, sample } = req.piq!;
+  const kind = req.body?.kind === 'companies' ? 'companies' : 'people';
+  req.piq!.apollo.ctx = `research:${req.body?.mode === 'industries' ? 'industries' : kind}`;
+  const filters = cleanFilters(req.body?.filters || {});
+  const page = Math.max(1, Number(req.body?.page) || 1);
+  const pp = PER_PAGE.includes(Number(req.body?.pp)) ? Number(req.body.pp) : 25;
+  if (!filtersActive(filters) && !sample) return res.json({ kind, filters, result: null, sample });
+  const result = kind === 'people' ? (live ? await searchPeople(apollo, filters, page, pp) : samplePeople(filters, page, pp)) : (live ? await searchCompanies(apollo, filters, page, pp) : sampleCompanies(filters, page, pp));
+  res.json({ kind, filters, result, sample });
+}));
+
+/* ---- one company by domain ---- */
+
+api.post('/lookup', requireClient('research:lookup'), wrap(async (req, res) => {
+  const { client, live, apollo, sample } = req.piq!;
+  const domain = normDomain(String(req.body?.domain || ''));
+  if (!domain) return res.status(400).json({ error: 'Enter the company domain, such as flowserve.com.' });
+  if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(domain)) return res.status(400).json({ error: `"${domain}" is not a domain.` });
+  const titles = cleanFilters({ titles: req.body?.titles }).titles;
+  const sen = cleanFilters({ sen: req.body?.sen }).sen;
+  const pp = Math.max(1, Math.min(50, Number(req.body?.pp) || 10));
+  const imports = String(req.body?.imports || '').slice(0, 1500);
+  let org: Org, people: Person[];
+  if (live) {
+    org = await orgByDomain(apollo, domain);
+    people = (await searchPeople(apollo, { ...cleanFilters({}), domains: [domain], titles: titles.length ? titles : client.profile.default_titles, similar: true, sen }, 1, pp)).rows;
+    if (!org.name && !people.length) return res.status(404).json({ error: `Nothing found for ${domain}.` });
+  } else {
+    ({ org, people } = sampleLookup(domain));
+  }
+  for (const p of people) p.role = roleFromTitle(p.title, client.profile.roles);
+  const [note, message] = draftNote(client.profile, org, people, imports);
+  res.json({ org, people, note, message, imports, sample });
+}));
+
+/* ---- pushes ---- */
+
+api.post('/push/people', requireClient('research:ask'), wrap(async (req, res) => {
+  const { client, live, apollo, sample } = req.piq!;
+  if (sample) return res.status(400).json({ error: 'Sample mode does not push to Launchpad.' });
+  const picks = new Set((req.body?.picks || []).map(String));
+  const people = ((req.body?.people || []) as Person[]).filter((p) => picks.has(String(p.id)));
+  if (!people.length) return res.status(400).json({ error: 'Tick at least one person.' });
+  const roles = (req.body?.roles || {}) as Record<string, string>;
+  const r = await pushPeople(client, people, roles, { live, apollo });
+  res.json({ ...r, links: r.results.map((x) => ({ company: lpUrl(client, 'business', x.company.id), opportunity: lpUrl(client, 'opportunity', x.opportunity.id), contacts: x.contacts.map((c) => lpUrl(client, 'contact', c.id)) })), bd: lpUrl(client, 'pipeline') });
+}));
+
+api.post('/push/companies', requireClient('research:companies'), wrap(async (req, res) => {
+  const { client, live, sample } = req.piq!;
+  if (sample) return res.status(400).json({ error: 'Sample mode does not push to Launchpad.' });
+  const picks = new Set((req.body?.picks || []).map(String));
+  const companies = ((req.body?.companies || []) as Org[]).filter((c) => picks.has(String(c.id)));
+  if (!companies.length) return res.status(400).json({ error: 'Tick at least one company.' });
+  const r = await pushCompanies(client, companies, live);
+  res.json({ ...r, links: r.results.map((x) => lpUrl(client, 'business', x.id)) });
+}));
+
+api.post('/push/lookup', requireClient('research:lookup'), wrap(async (req, res) => {
+  const { client, live, apollo, sample } = req.piq!;
+  if (sample) return res.status(400).json({ error: 'Sample mode does not push to Launchpad.' });
+  const org = req.body?.org as Org;
+  if (!org?.name) return res.status(400).json({ error: 'Nothing to push: look a company up first.' });
+  const picks = new Set((req.body?.picks || []).map(String));
+  const roles = (req.body?.roles || {}) as Record<string, string>;
+  const contacts: Person[] = [];
+  const renames: Record<string, string> = {};
+  const errors: string[] = [];
+  for (let p of (req.body?.people || []) as Person[]) {
+    if (!picks.has(String(p.id))) continue;
+    p.role = client.profile.roles.includes(roles[p.id] || '') ? roles[p.id] : roleFromTitle(p.title, client.profile.roles);
+    const before = `${p.first} ${p.last}`.trim();
+    if (p.last_obf || !p.linkedin) {
+      try { p = live ? await enrichPerson(apollo, p, org.domain) : sampleEnrich(p); renames[before] = `${p.first} ${p.last}`.trim(); }
+      catch (e) { errors.push(`Could not look up ${before}: ${(e as Error).message}`); }
+    }
+    if (p.last_obf) p.last = '';
+    contacts.push(p);
+  }
+  if (!contacts.length) return res.status(400).json({ error: 'Tick at least one contact.' });
+  const lp = lpOf(client);
+  if (!lpReady(lp)) return res.status(400).json({ error: 'Launchpad is not connected for this client.' });
+  const rename = (s: string) => Object.entries(renames).reduce((acc, [a, b]) => acc.split(a).join(b), s);
+  const imports = String(req.body?.imports || '');
+  const result = await pushProspect(lp, { company: { name: org.name, website: org.website, city: org.city, state: org.state, country: org.country, phone: org.phone, description: (org.description + (imports.trim() ? `\n\nImports (ImportGenius): ${imports.trim()}` : '')).trim(), industry: org.industry, size: sizeBucket(org.employees) }, contacts, note: rename(String(req.body?.note || '')), message: rename(String(req.body?.message || '')) });
+  res.json({ results: [result], errors, links: [{ company: lpUrl(client, 'business', result.company.id), opportunity: lpUrl(client, 'opportunity', result.opportunity.id), contacts: result.contacts.map((c) => lpUrl(client, 'contact', c.id)) }], bd: lpUrl(client, 'pipeline') });
+}));
+
+/* ---- finders ---- */
+
+function finderView(f: Finder, tz: string) {
+  return { ...f, seen: undefined, seen_count: f.seen?.length || 0, when: describe(f, tz), next: nextRun(f, tz) };
+}
+
+api.get('/finders', requireClient('finders'), (req, res) => {
+  const { client } = req.piq!;
+  res.json({ finders: listFinders(client.slug).map((f) => finderView(f, client.launchpad.timezone)) });
+});
+
+api.post('/finders', requireClient('finders'), wrap(async (req, res) => {
+  const { client } = req.piq!;
+  const f = createFinder(client, req.body || {});
+  res.json({ finder: finderView(f, client.launchpad.timezone) });
+}));
+
+api.post('/finders/:id/run', requireClient('finders'), wrap(async (req, res) => {
+  const { client, live, sample } = req.piq!;
+  const r = await runAndSave(client, String(req.params.id), live && !sample);
+  res.json({ ...r, seen: undefined, links: r.pushed.map((p) => lpUrl(client, 'contact', p.id)) });
+}));
+
+api.post('/finders/:id/toggle', requireClient('finders'), (req, res) => {
+  const { client } = req.piq!;
+  const all = listFinders(client.slug).map((f) => (f.id === req.params.id ? { ...f, enabled: !f.enabled } : f));
+  saveFinders(client.slug, all);
+  res.json({ ok: true });
+});
+
+api.delete('/finders/:id', requireClient('finders'), (req, res) => {
+  const { client } = req.piq!;
+  saveFinders(client.slug, listFinders(client.slug).filter((f) => f.id !== req.params.id));
+  res.json({ ok: true });
+});
+
+/* ---- usage ---- */
+
+api.get('/usage', requireClient('usage'), wrap(async (req, res) => {
+  const { client, live, apollo, sample } = req.piq!;
+  const days = [7, 30, 90].includes(Number(req.query.days)) ? Number(req.query.days) : 30;
+  const summary = usageCompute(usageRead(client.slug, days), days, client.launchpad.timezone);
+  let plan: unknown[] = [];
+  if (live && !sample) { try { plan = await planLimits(apollo); } catch { plan = []; } }
+  res.json({ summary, plan, prices: config.openaiPrices });
+}));
+
+/* ---- admin ---- */
+
+const admin = Router();
+admin.use(requireAdmin);
+
+admin.get('/clients', (_req, res) => {
+  res.json({ clients: listClients().map((c) => ({ slug: c.slug, name: c.name, enabled: c.enabled, created: c.created, connected: lpReady(lpOf(c)), has_openai: !!effectiveKeys(c).openai, has_apollo: !!effectiveKeys(c).apollo, finders: listFinders(c.slug).length })) });
+});
+
+admin.post('/clients', (req, res) => {
+  try {
+    const c = createClient({ slug: String(req.body?.slug || req.body?.name || ''), name: String(req.body?.name || '') });
+    res.json({ client: c });
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message });
+  }
+});
+
+admin.get('/clients/:slug', (req, res) => {
+  const c = getClient(String(req.params.slug));
+  if (!c) return res.status(404).json({ error: 'No such client.' });
+  res.json({ client: c, links: menuLinks(c), finders: listFinders(c.slug).map((f) => finderView(f, c.launchpad.timezone)) });
+});
+
+admin.put('/clients/:slug', (req, res) => {
+  const c = getClient(String(req.params.slug));
+  if (!c) return res.status(404).json({ error: 'No such client.' });
+  const b = req.body || {};
+  if (typeof b.name === 'string') c.name = b.name.trim().slice(0, 80) || c.name;
+  if (typeof b.enabled === 'boolean') c.enabled = b.enabled;
+  if (b.launchpad && typeof b.launchpad === 'object') for (const k of ['location_id', 'token', 'app_url', 'pipeline', 'quote_stage', 'owner', 'timezone'] as const) if (typeof b.launchpad[k] === 'string') c.launchpad[k] = b.launchpad[k].trim();
+  if (b.keys && typeof b.keys === 'object') for (const k of ['openai', 'openai_model', 'apollo'] as const) if (typeof b.keys[k] === 'string') c.keys[k] = b.keys[k].trim();
+  if (b.limits && typeof b.limits === 'object' && b.limits.credits_per_month != null) c.limits.credits_per_month = Math.max(0, Number(b.limits.credits_per_month) || 0);
+  if (b.profile && typeof b.profile === 'object') c.profile = cleanProfile({ ...c.profile, ...b.profile });
+  saveClient(c);
+  res.json({ client: c, links: menuLinks(c) });
+});
+
+admin.post('/clients/:slug/rotate-key', (req, res) => {
+  const c = getClient(String(req.params.slug));
+  if (!c) return res.status(404).json({ error: 'No such client.' });
+  c.access_key = newKey();
+  saveClient(c);
+  res.json({ client: c, links: menuLinks(c) });
+});
+
+admin.delete('/clients/:slug', (req, res) => {
+  deleteClient(String(req.params.slug));
+  res.json({ ok: true });
+});
+
+admin.post('/clients/:slug/test', wrap(async (req, res) => {
+  const c = getClient(String(req.params.slug));
+  if (!c) return res.status(404).json({ error: 'No such client.' });
+  const lp = lpOf(c);
+  const result = await testConnection({ ...lp, ...(req.body?.launchpad || {}) });
+  res.json(result);
+}));
+
+admin.post('/clients/:slug/draft', wrap(async (req, res) => {
+  const c = getClient(String(req.params.slug));
+  if (!c) return res.status(404).json({ error: 'No such client.' });
+  const keys = effectiveKeys(c);
+  if (!keys.openai) return res.status(400).json({ error: 'Add an OpenAI key (client or agency) before drafting from a website.' });
+  const url = String(req.body?.url || '').trim();
+  if (!url) return res.status(400).json({ error: 'Enter the website address.' });
+  const text = await siteText(url);
+  const profile = await draftProfile({ slug: c.slug, ctx: 'admin:draft', key: keys.openai, model: keys.openaiModel }, text, url);
+  res.json({ profile });
+}));
+
+admin.get('/clients/:slug/usage', (req, res) => {
+  const c = getClient(String(req.params.slug));
+  if (!c) return res.status(404).json({ error: 'No such client.' });
+  const days = [7, 30, 90].includes(Number(req.query.days)) ? Number(req.query.days) : 30;
+  res.json({ summary: usageCompute(usageRead(c.slug, days), days, c.launchpad.timezone) });
+});
+
+api.use('/admin', admin);
+
+function menuLinks(c: Client): { label: string; url: string }[] {
+  const base = `${config.publicUrl}/?key=${encodeURIComponent(c.access_key)}`;
+  return [{ label: 'ProspectIQ', url: base }, { label: 'Usage (admins)', url: `${base}&view=usage` }];
+}
+
+function cleanProfile(p: Partial<Profile>): Profile {
+  const list = (v: unknown, cap: number) => (Array.isArray(v) ? v.map(String).map((s) => s.trim()).filter(Boolean).slice(0, cap) : []);
+  const templates: Record<string, string[]> = {};
+  if (p.templates && typeof p.templates === 'object') for (const [g, items] of Object.entries(p.templates)) { const l = list(items, 6); if (g.trim() && l.length) templates[g.trim().slice(0, 60)] = l; }
+  const angles = Array.isArray(p.angles) ? p.angles.filter((a) => a && typeof a === 'object').map((a) => ({ match: String(a.match || '.').slice(0, 200), what: String(a.what || '').slice(0, 200), why: String(a.why || '').slice(0, 300) })).slice(0, 8) : [];
+  const roles = list(p.roles, 8);
+  return { company: String(p.company || '').trim().slice(0, 80), sells: String(p.sells || '').trim().slice(0, 600), sells_to: String(p.sells_to || '').trim().slice(0, 600), industries: list(p.industries, 30), roles: roles.length ? roles : ['Purchasing', 'Operations', 'Executive', 'Other'], angles, templates, default_titles: list(p.default_titles, 20) };
+}

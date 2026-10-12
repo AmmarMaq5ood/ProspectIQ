@@ -1,0 +1,56 @@
+/* ProspectIQ (React) additions to the shared Launchpad-look stylesheet. */
+
+.boot { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 60vh; color: var(--muted); font-size: 14px; }
+.spin.dark { border-color: var(--border-2); border-top-color: var(--primary); }
+.pager a { cursor: pointer; }
+.tabs a { cursor: pointer; }
+
+/* sign-in */
+.login { display: flex; justify-content: center; padding: 56px 0 40px; }
+.login-card { width: min(560px, 100%); padding: 28px 28px 24px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 10px 30px rgba(16, 24, 40, 0.08); }
+.login-card h2 { margin: 14px 0 4px; font-size: 24px; font-weight: 600; }
+.login-card .sub { margin: 0 0 18px; color: var(--muted); }
+.login-form + .login-form { margin-top: 6px; }
+.login-or { display: flex; align-items: center; gap: 12px; margin: 22px 0 14px; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+.login-or::before, .login-or::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+.ask-kicker.dark { color: #1d4ed8; background: var(--primary-soft); border: 1px solid var(--primary-line); }
+
+/* admin */
+.clients td .nm { display: block; font-weight: 600; color: var(--text); }
+.clients td .st { display: block; font-size: 12px; color: var(--muted); }
+.clients tr { cursor: pointer; }
+.clients tr:hover td { background: var(--surface-2); }
+.pills-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.newc { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 10px; align-items: end; }
+.kv { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 14px; align-items: center; font-size: 13.5px; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.kv code, .keybox { display: inline-block; max-width: 100%; padding: 4px 8px; border-radius: 6px; font-size: 12.5px; background: var(--surface-2); border: 1px solid var(--border); color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.secret { position: relative; }
+.secret input { padding-right: 70px; }
+.secret button { position: absolute; right: 6px; top: 6px; height: 26px; padding: 0 8px; font: inherit; font-size: 12px; color: var(--text-3); background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
+.angles { display: grid; gap: 8px; }
+.angle { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 2fr) auto; gap: 8px; align-items: start; }
+.angle .btn { height: 38px; }
+.tplg { display: grid; gap: 10px; }
+.tplg .g { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 10px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--r); background: var(--surface-2); }
+.tplg .g textarea { grid-column: 1 / -1; min-height: 72px; background: var(--surface); }
+.stages { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.stages .pill { cursor: pointer; }
+.stages .pill.sel { color: #1d4ed8; border-color: #93c5fd; background: var(--primary-soft); }
+.savebar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
+.savebar .hint { margin-right: auto; }
+.draft { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: end; padding: 14px; margin-bottom: 16px; border: 1px dashed var(--primary-line); border-radius: var(--r); background: var(--primary-soft); }
+.draft .f { margin-bottom: 6px; }
+.copyable { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; }
+.copyable .btn.sm { height: 28px; padding: 0 8px; font-size: 12px; }
+.toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 13.5px; cursor: pointer; }
+.toggle input { width: 16px; height: 16px; accent-color: var(--primary); }
+.kpis.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.lead a.pill { cursor: pointer; }
+@media (max-width: 900px) {
+  .angle { grid-template-columns: minmax(0, 1fr); }
+  .newc { grid-template-columns: minmax(0, 1fr); }
+  .draft { grid-template-columns: minmax(0, 1fr); }
+  .kpis.four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
