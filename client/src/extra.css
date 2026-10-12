@@ -35,9 +35,9 @@
 .tplg { display: grid; gap: 10px; }
 .tplg .g { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 10px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--r); background: var(--surface-2); }
 .tplg .g textarea { grid-column: 1 / -1; min-height: 72px; background: var(--surface); }
-.stages { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.stages { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 6px; margin-top: 6px; }
 .stages .pill { cursor: pointer; }
-.stages .pill.sel { color: #1d4ed8; border-color: #93c5fd; background: var(--primary-soft); }
+.stages .pill.picked { color: #1d4ed8; border-color: #93c5fd; background: var(--primary-soft); }
 .savebar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
 .savebar .hint { margin-right: auto; }
 .draft { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: end; padding: 14px; margin-bottom: 16px; border: 1px dashed var(--primary-line); border-radius: var(--r); background: var(--primary-soft); }

@@ -127,7 +127,7 @@ function LaunchpadTab({ c, set, onSave, setErr, setOk }: { c: Client; set: (fn: 
         <div><label className="f" htmlFor="app">Launchpad app address (for the links back)</label><input type="text" id="app" value={lp.app_url} placeholder="https://app.launchpadinnovations.ai" onChange={(e) => L('app_url', e.target.value)} /></div>
         <div><label className="f" htmlFor="own">Deal owner (user id, optional)</label><input type="text" id="own" value={lp.owner} placeholder="assign new outreach deals to this user" onChange={(e) => L('owner', e.target.value)} /></div>
         <div><label className="f" htmlFor="pipe">Outreach pipeline name</label><input type="text" id="pipe" value={lp.pipeline} placeholder="Business Development" onChange={(e) => L('pipeline', e.target.value)} />
-          {test?.ok && test.pipelines.length > 0 && <div className="stages">{test.pipelines.map((p) => <span key={p.id} className={`pill${p.name === lp.pipeline ? ' sel' : ''}`} onClick={() => L('pipeline', p.name)} title={p.stages.join(' → ')}>{p.name}</span>)}</div>}
+          {test?.ok && test.pipelines.length > 0 && <div className="stages">{test.pipelines.map((p) => <span key={p.id} className={`pill${p.name === lp.pipeline ? ' picked' : ''}`} onClick={() => L('pipeline', p.name)} title={p.stages.join(' → ')}>{p.name}</span>)}</div>}
         </div>
         <div><label className="f" htmlFor="qs">Quote stage name (optional)</label><input type="text" id="qs" value={lp.quote_stage} placeholder="the stage that counts as a quote sent" onChange={(e) => L('quote_stage', e.target.value)} /></div>
       </div>
