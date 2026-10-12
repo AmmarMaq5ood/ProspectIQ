@@ -1,9 +1,17 @@
 import 'dotenv/config';
 import path from 'node:path';
 
+function normalizeBase(v: string): string {
+  v = v.trim().replace(/\/+$/, '');
+  if (v && !v.startsWith('/')) v = `/${v}`;
+  return v === '/' ? '' : v;
+}
+
 /** Process-level settings. Per-client settings live in the client record (clients.ts). */
 export const config = {
   port: Number(process.env.PORT || 3000),
+  /** URL prefix the app lives under behind nginx, e.g. /prospectiq ('' = the domain root). */
+  basePath: normalizeBase(process.env.BASE_PATH || ''),
   adminKey: process.env.ADMIN_KEY || '',
   dataDir: path.resolve(process.env.DATA_DIR || './data'),
   openaiKey: process.env.OPENAI_API_KEY || '',

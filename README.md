@@ -52,14 +52,67 @@ For development with hot reload: `npm run dev` (server on 3000) and `npm run dev
 
 Without a research key the app runs in **sample mode**: canned results, nothing written, pushes disabled. Add `?sample=1` to any URL to force it.
 
-## Deploy on Hostinger (Node.js app)
+## Deploy on the CloudPanel VPS (shared Node.js site, path prefix)
 
-- Build command: `npm install && npm run build`
-- Start command: `npm start`
-- Environment: `ADMIN_KEY`, `DATA_DIR` (a persistent, writable folder outside the deploy directory, e.g. `/home/<user>/prospectiq-data`), `PUBLIC_URL` (the app's https address, used for the menu links), optional agency `OPENAI_API_KEY` / `APOLLO_API_KEY`, `LAUNCHPAD_APP_URL`. Leave `PORT` unset; Hostinger provides it.
-- The app must be served over **https**: the sign-in cookie is `SameSite=None; Secure` so it works inside Launchpad's iframe.
-- Finders run inside the server process (every five minutes it runs what is due). No cron needed; the process just has to stay up.
-- After the first deploy run `node server/dist/seed.js` once with the same `DATA_DIR` to create Artmark, or create clients in the admin panel.
+The VPS runs CloudPanel. The Node.js site `js.launchpadinnovations.ai` already serves other apps, so ProspectIQ lives under a prefix on that domain, `https://js.launchpadinnovations.ai/prospectiq/`, on its own port. Nothing else on the site changes.
+
+**1. Shell on the VPS** (Hostinger hPanel → VPS → Terminal, or SSH as root), then become the site user:
+
+```bash
+su - launchpadinnovations-js
+node -v                              # needs 20 or newer
+ss -ltn | grep -E ':3[0-9]{3} '      # ports already in use; pick a free one (3010 below)
+cd ~ && git clone https://github.com/AmmarMaq5ood/ProspectIQ.git prospectiq
+cd prospectiq && npm install
+```
+
+**2. Settings** in `~/prospectiq/.env`:
+
+```
+PORT=3010
+BASE_PATH=/prospectiq
+PUBLIC_URL=https://js.launchpadinnovations.ai/prospectiq
+ADMIN_KEY=<a long random string>
+DATA_DIR=/home/launchpadinnovations-js/prospectiq-data
+OPENAI_API_KEY=<agency key>
+OPENAI_MODEL=gpt-6-luna
+APOLLO_API_KEY=<agency key>
+LAUNCHPAD_APP_URL=https://app.launchpadinnovations.ai
+```
+
+**3. Build, seed, run under pm2:**
+
+```bash
+npm run build                        # the client reads BASE_PATH from .env
+npm run seed                         # creates Artmark, prints its access key
+npm i -g pm2 2>/dev/null || true     # skip if pm2 is already there
+pm2 start server/dist/index.js --name prospectiq --cwd ~/prospectiq
+pm2 save && pm2 startup              # run the printed command once as root so it survives reboots
+curl -s http://127.0.0.1:3010/prospectiq/api/health
+```
+
+**4. nginx** in CloudPanel → Sites → js.launchpadinnovations.ai → Vhost: add this block *above* the existing `location /` block, then save:
+
+```nginx
+location /prospectiq/ {
+    proxy_pass http://127.0.0.1:3010;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_read_timeout 300;
+}
+location = /prospectiq { return 301 /prospectiq/; }
+```
+
+`https://js.launchpadinnovations.ai/prospectiq/api/health` should then answer. Open `/prospectiq/admin`, enter the admin key, fill in Artmark's Launchpad token, location id and pipeline (the data folder on the VPS starts empty), and paste the two menu links from *Access & links* into Launchpad.
+
+**Updating later:** `cd ~/prospectiq && git pull && npm install && npm run build && pm2 restart prospectiq`.
+
+The site is https (the sign-in cookie is `SameSite=None; Secure`, which Launchpad's iframe needs). Finders run inside the pm2 process; no cron. `pm2 logs prospectiq` shows the finder runs and API errors.
 
 ## How a client uses it
 

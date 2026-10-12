@@ -8,6 +8,9 @@ export class ApiError extends Error {
   }
 }
 
+/** Where the app is served from (Vite's base, e.g. /prospectiq/), without the trailing slash. */
+export const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
+
 let sampleFlag = false;
 export const setSample = (on: boolean) => { sampleFlag = on; };
 export const isSample = () => sampleFlag;
@@ -20,7 +23,7 @@ export async function api<T>(path: string, opts: { method?: string; body?: unkno
   if (sampleFlag) q.set('sample', '1');
   const qs = q.toString() ? `?${q}` : '';
   const method = opts.method || (opts.body !== undefined ? 'POST' : 'GET');
-  const r = await fetch(`/api${path}${qs}`, {
+  const r = await fetch(`${BASE}/api${path}${qs}`, {
     method,
     headers: opts.body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
