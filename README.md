@@ -110,7 +110,23 @@ location = /prospectiq { return 301 /prospectiq/; }
 
 `https://js.launchpadinnovations.ai/prospectiq/api/health` should then answer. Open `/prospectiq/admin`, enter the admin key, fill in Artmark's Launchpad token, location id and pipeline (the data folder on the VPS starts empty), and paste the two menu links from *Access & links* into Launchpad.
 
-**Updating later:** `cd ~/prospectiq && git pull && npm install && npm run build && pm2 restart prospectiq`.
+**Updating by hand:** `cd ~/prospectiq && git pull && bash deploy/update.sh` (pull, install, build, pm2 restart, health check).
+
+## Auto-deploy on push (GitHub Actions)
+
+`.github/workflows/deploy.yml` runs on every push to `main`: it installs, builds and runs the tests on GitHub, and only if that passes it SSHes into the VPS as the site user and runs `deploy/update.sh`. Until the secrets below exist the deploy job is skipped with a notice, so the checks still run.
+
+One-off setup:
+
+1. **Deploy key.** On your laptop (Git Bash): `ssh-keygen -t ed25519 -N "" -f ~/.ssh/prospectiq_deploy -C prospectiq-deploy`. Then on the VPS, as the site user, append the *public* key to `~/.ssh/authorized_keys` (create `~/.ssh` with mode 700 and the file with mode 600 if missing).
+2. **Secrets** in the GitHub repo → Settings → Secrets and variables → Actions:
+   - `DEPLOY_HOST` = `2.24.203.63`
+   - `DEPLOY_USER` = `launchpadinnovations-js`
+   - `DEPLOY_KEY` = the whole contents of the *private* key file `~/.ssh/prospectiq_deploy`
+3. Push to `main` (or run the workflow from the Actions tab). The deploy job prints the health-check line when it is done.
+
+The server keeps its own `.env` and data folder; the deploy resets only tracked files to the pushed commit. A failed build or test on GitHub never touches the server.
+
 
 The site is https (the sign-in cookie is `SameSite=None; Secure`, which Launchpad's iframe needs). Finders run inside the pm2 process; no cron. `pm2 logs prospectiq` shows the finder runs and API errors.
 
