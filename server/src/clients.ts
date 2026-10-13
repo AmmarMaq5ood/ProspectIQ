@@ -78,7 +78,8 @@ function normalize(c: Client): Client {
   const raw = c as Client & { limits?: unknown };
   const old = c.credits as unknown as { total?: number; monthly?: number; used?: number; period?: string; extra?: number } | undefined;
   if (!old || typeof old.monthly !== 'number') c.credits = { monthly: typeof old?.total === 'number' ? old.total : 1000, used: old?.used || 0, period: '', extra: 0 };
-  if (!c.flags) c.flags = { show_usage: false };
+  if (!c.flags) c.flags = { show_usage: false, show_activity: true };
+  if (typeof c.flags.show_activity !== 'boolean') c.flags.show_activity = true;
   delete raw.limits;
   return c;
 }
@@ -162,7 +163,7 @@ export function createClient(input: { slug: string; name: string; profile?: Part
     launchpad: { location_id: '', token: '', app_url: config.launchpadApp, pipeline: 'Business Development', quote_stage: 'Quoted', owner: '', timezone: 'America/New_York', users: {} },
     keys: { openai: '', openai_model: '', apollo: '' },
     credits: { monthly: 1000, used: 0, period: '', extra: 0 },
-    flags: { show_usage: false },
+    flags: { show_usage: false, show_activity: true },
     profile: { ...blankProfile(input.name.trim()), ...(input.profile || {}) },
   };
   return saveClient(client);
@@ -193,6 +194,7 @@ export function publicClient(client: Client) {
     has_launchpad: !!(client.launchpad.token && client.launchpad.location_id),
     credits: creditsView(client),
     show_usage: !!client.flags.show_usage,
+    show_activity: client.flags.show_activity !== false,
     support_email: agencySettings().support_email || '',
   };
 }

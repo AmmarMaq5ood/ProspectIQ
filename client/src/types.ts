@@ -130,6 +130,7 @@ export interface PublicClient {
   has_launchpad: boolean;
   credits: Credits;
   show_usage: boolean;
+  show_activity: boolean;
   support_email: string;
 }
 
@@ -247,10 +248,21 @@ export interface Client {
   };
   keys: { openai: string; openai_model: string; apollo: string };
   credits: { monthly: number; used: number; period: string; extra: number };
-  flags: { show_usage: boolean };
+  flags: { show_usage: boolean; show_activity: boolean };
   profile: Profile;
 }
 
 export interface ClientRow { slug: string; name: string; enabled: boolean; created: number; connected: boolean; has_openai: boolean; has_apollo: boolean; finders: number }
 
 export interface MenuLink { label: string; url: string }
+
+export type ActivityKind = 'finder' | 'push' | 'search' | 'lookup' | 'credits' | 'system';
+export interface ActivityItem { name: string; company?: string; id?: string; email?: string }
+export interface Activity { t: number; kind: ActivityKind; title: string; detail?: string; credits?: number; by: string; ok: boolean; n?: number; items?: ActivityItem[]; ref?: string }
+export interface ActivityPage { rows: Activity[]; total: number; page: number; pages: number; per: number }
+
+export interface Overview {
+  totals: { clients: number; connected: number; finders: number; credits_total: number; credits_used: number; credits_left: number; clients_out: number; pushed_month: number; searches_month: number; finder_runs_today: number };
+  clients: { slug: string; name: string; enabled: boolean; connected: boolean; credits: Credits; finders: number; last: Activity | null }[];
+  recent: (Activity & { client: string; slug: string })[];
+}

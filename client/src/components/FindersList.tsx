@@ -56,7 +56,7 @@ export function FindersList({ refreshKey = 0, onChange }: { refreshKey?: number;
                 <div className="nm">{f.name} <span className={`pill ${f.enabled ? 'good' : ''}`}>{f.enabled ? 'on' : 'paused'}</span></div>
                 <div className="st">{f.intent.kind === 'people' ? 'People' : 'Companies'} · {f.when} · {f.last_run ? `last run ${fmtWhen(f.last_run, tz)}` : 'never run'} · next {fmtWhen(f.next, tz, true)}</div>
                 {f.last_result && <div className="st">{f.last_result}</div>}
-                {f.q && <div className="st"><a onClick={() => nav(`/?q=${encodeURIComponent(f.q)}`)} style={{ cursor: 'pointer' }}>open this search</a></div>}
+                <div className="st">{f.q && <><a onClick={() => nav(`/?q=${encodeURIComponent(f.q)}`)} style={{ cursor: 'pointer' }}>open this search</a> · </>}{me.client?.show_activity !== false && <a onClick={() => nav(`/activity?kind=finder&ref=${encodeURIComponent(f.id)}`)} style={{ cursor: 'pointer' }}>see its runs</a>}</div>
               </div>
               <div className="rowtools" style={{ margin: 0 }}>
                 <button className="btn sm" type="button" onClick={() => act('Run', () => busy.run('Running the finder… searching, looking leads up and writing them into Launchpad', async () => { const r = await api<RunResult & { seen?: unknown }>(`/finders/${f.id}/run`, { body: {} }); setRun(r); }))}><Icon name="refresh" />Run now</button>

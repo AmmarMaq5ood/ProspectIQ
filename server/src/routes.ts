@@ -4,6 +4,7 @@ import { config } from './config.js';
 import { createClient, deleteClient, effectiveKeys, getClient, getClientByKey, getClientByLocation, listClients, newKey, publicClient, rotateLinkSecret, saveClient, saveAgencySettings, agencySettings, universalLink } from './clients.js';
 import { addCredits, creditCheck, creditLedger, creditsLeft, creditsView, setMonthly, spendCredits } from './credits.js';
 import { annotateInLaunchpad, markPushed } from './lpindex.js';
+import { logActivity, readActivity } from './activity.js';
 import { DEPARTMENTS, EMAIL_STATUS, EMPLOYEE_RANGES, FUNDING, PER_PAGE, SENIORITY, enrichPerson, orgByDomain, planLimits, searchCompanies, searchPeople, type ApolloCtx } from './apollo.js';
 import { cleanFilters, cleanIntent, filtersActive, intentFilters, normDomain } from './rules.js';
 import { askIntent, draftProfile, fitLines, siteText, type LlmCtx } from './llm.js';
@@ -137,7 +138,10 @@ api.post('/ask', requireClient('research:ask'), wrap(async (req, res) => {
   const result = kind === 'people' ? (live ? await searchPeople(apollo, filters, page, pp) : samplePeople(filters, page, pp)) : (live ? await searchCompanies(apollo, filters, page, pp) : sampleCompanies(filters, page, pp));
   if (kind === 'people') await annotateInLaunchpad(client, result.rows as Person[], live);
   const fits = await fitLines(llm, client.profile, result.rows, intent, kind, useGpt);
-  if (live && page === 1) recentAdd(client.slug, { q, kind, total: result.total, t: Date.now() });
+  if (live && page === 1) {
+    recentAdd(client.slug, { q, kind, total: result.total, t: Date.now() });
+    logActivity(client.slug, { kind: 'search', title: q, detail: `${result.total.toLocaleString('en-US')} ${kind} found`, by: 'client', ok: true, n: result.total });
+  }
   const warnings: string[] = [];
   if (intent.error) warnings.push(`GPT could not read the request (${intent.error}); the built-in parser was used.`);
   if (sample) warnings.push(!effectiveKeys(client).apollo ? 'No research key for this client yet: these are sample results.' : 'Sample mode: canned results, nothing is written.');
@@ -156,6 +160,7 @@ api.post('/search', requireClient('research:people'), wrap(async (req, res) => {
   if (!filtersActive(filters) && !sample) return res.json({ kind, filters, result: null, sample });
   const result = kind === 'people' ? (live ? await searchPeople(apollo, filters, page, pp) : samplePeople(filters, page, pp)) : (live ? await searchCompanies(apollo, filters, page, pp) : sampleCompanies(filters, page, pp));
   if (kind === 'people') await annotateInLaunchpad(req.piq!.client, result.rows as Person[], live);
+  if (live && page === 1) logActivity(req.piq!.client.slug, { kind: 'search', title: filtersSummary(filters, kind), detail: `${result.total.toLocaleString('en-US')} ${kind} found (${req.body?.mode === 'industries' ? 'Industries' : kind === 'people' ? 'People' : 'Companies'} tab)`, by: 'client', ok: true, n: result.total });
   res.json({ kind, filters, result, sample });
 }));
 
@@ -180,6 +185,7 @@ api.post('/lookup', requireClient('research:lookup'), wrap(async (req, res) => {
   }
   for (const p of people) p.role = roleFromTitle(p.title, client.profile.roles);
   await annotateInLaunchpad(client, people, live);
+  if (live) logActivity(client.slug, { kind: 'lookup', title: domain, detail: `${org.name || domain}: ${people.length} people found`, by: 'client', ok: true, n: people.length });
   const [note, message] = draftNote(client.profile, org, people, imports);
   res.json({ org, people, note, message, imports, sample });
 }));
@@ -198,6 +204,10 @@ api.post('/push/people', requireClient('research:ask'), wrap(async (req, res) =>
   if (blocked) return res.status(402).json({ error: blocked, credits_left: creditsLeft(client) });
   const r = await pushPeople(client, people, roles, { live, apollo });
   const credits_left = r.spent ? spendCredits(client, r.spent, 'push from the research tabs') : creditsLeft(client);
+  if (live) {
+    const contacts = r.results.flatMap((x) => x.contacts.map((c) => ({ name: c.name, company: x.company.name, id: c.id, email: c.email })));
+    logActivity(client.slug, { kind: 'push', title: `Pushed ${contacts.length} lead${contacts.length === 1 ? '' : 's'} to Launchpad`, detail: [...new Set(r.results.map((x) => x.company.name))].join(', ') + (r.errors.length ? ` · ${r.errors.length} error${r.errors.length === 1 ? '' : 's'}` : ''), credits: r.spent, by: 'client', ok: r.errors.length === 0, n: contacts.length, items: contacts });
+  }
   res.json({ ...r, credits_spent: r.spent, credits_left, links: r.results.map((x) => ({ company: lpUrl(client, 'business', x.company.id), opportunity: lpUrl(client, 'opportunity', x.opportunity.id), contacts: x.contacts.map((c) => lpUrl(client, 'contact', c.id)) })), bd: lpUrl(client, 'pipeline') });
 }));
 
@@ -208,6 +218,7 @@ api.post('/push/companies', requireClient('research:companies'), wrap(async (req
   const companies = ((req.body?.companies || []) as Org[]).filter((c) => picks.has(String(c.id)));
   if (!companies.length) return res.status(400).json({ error: 'Tick at least one company.' });
   const r = await pushCompanies(client, companies, live);
+  if (live) logActivity(client.slug, { kind: 'push', title: `Pushed ${r.results.length} compan${r.results.length === 1 ? 'y' : 'ies'} to Launchpad`, detail: r.results.map((x) => x.name).join(', '), credits: 0, by: 'client', ok: r.errors.length === 0, n: r.results.length, items: r.results.map((x) => ({ name: x.name, company: x.domain, id: x.id })) });
   res.json({ ...r, links: r.results.map((x) => lpUrl(client, 'business', x.id)) });
 }));
 
@@ -244,6 +255,7 @@ api.post('/push/lookup', requireClient('research:lookup'), wrap(async (req, res)
   markPushed(client.slug, result.contacts.map((c, i) => ({ researchId: contacts[i]?.id || '', lpId: c.id, name: c.name })));
   const spent = countSpent(result);
   const credits_left = spent ? spendCredits(client, spent, `push from company lookup (${org.domain || org.name})`) : creditsLeft(client);
+  logActivity(client.slug, { kind: 'push', title: `Pushed ${result.contacts.length} contact${result.contacts.length === 1 ? '' : 's'} at ${org.name} to Launchpad`, detail: `From company lookup (${org.domain || org.name})${errors.length ? ` · ${errors.length} lookup error${errors.length === 1 ? '' : 's'}` : ''}`, credits: spent, by: 'client', ok: errors.length === 0, n: result.contacts.length, items: result.contacts.map((c) => ({ name: c.name, company: org.name, id: c.id, email: c.email })) });
   res.json({ results: [result], errors, credits_spent: spent, credits_left, links: [{ company: lpUrl(client, 'business', result.company.id), opportunity: lpUrl(client, 'opportunity', result.opportunity.id), contacts: result.contacts.map((c) => lpUrl(client, 'contact', c.id)) }], bd: lpUrl(client, 'pipeline') });
 }));
 
@@ -266,7 +278,7 @@ api.post('/finders', requireClient('finders'), wrap(async (req, res) => {
 
 api.post('/finders/:id/run', requireClient('finders'), wrap(async (req, res) => {
   const { client, live, sample } = req.piq!;
-  const r = await runAndSave(client, String(req.params.id), live && !sample);
+  const r = await runAndSave(client, String(req.params.id), live && !sample, 'client');
   res.json({ ...r, seen: undefined, links: r.pushed.map((p) => lpUrl(client, 'contact', p.id)) });
 }));
 
@@ -282,6 +294,20 @@ api.delete('/finders/:id', requireClient('finders'), (req, res) => {
   saveFinders(client.slug, listFinders(client.slug).filter((f) => f.id !== req.params.id));
   res.json({ ok: true });
 });
+
+/* ---- the activity log ---- */
+
+api.get('/activity', requireClient('activity'), (req, res) => {
+  const { client } = req.piq!;
+  if (!isAdmin(req) && client.flags.show_activity === false) return res.status(403).json({ error: 'The activity log is not switched on for this account.' });
+  res.json(readActivity(client.slug, { page: Number(req.query.page), per: Number(req.query.per), kind: String(req.query.kind || ''), ref: String(req.query.ref || '') }));
+});
+
+/** A short line for a filter search in the log. */
+function filtersSummary(f: ReturnType<typeof cleanFilters>, kind: string): string {
+  const bits = [f.titles.join('/'), f.sen.join('/'), f.okw.join('/'), f.oname, f.domains.join('/'), [...f.ploc, ...f.oloc].join('/'), f.size.length ? `${f.size.length} size band${f.size.length === 1 ? '' : 's'}` : '', f.rev_min || f.rev_max ? `revenue ${f.rev_min || '0'}–${f.rev_max || '∞'}` : '', f.tech.join('/'), f.kw, f.oids.length ? `${f.oids.length} picked companies` : ''].filter(Boolean);
+  return bits.length ? bits.join(' · ').slice(0, 200) : `All ${kind}`;
+}
 
 /* ---- usage ---- */
 
@@ -339,10 +365,19 @@ admin.put('/clients/:slug', (req, res) => {
   if (typeof b.enabled === 'boolean') c.enabled = b.enabled;
   if (b.launchpad && typeof b.launchpad === 'object') for (const k of ['location_id', 'token', 'app_url', 'pipeline', 'quote_stage', 'owner', 'timezone'] as const) if (typeof b.launchpad[k] === 'string') c.launchpad[k] = b.launchpad[k].trim();
   if (b.keys && typeof b.keys === 'object') for (const k of ['openai', 'openai_model', 'apollo'] as const) if (typeof b.keys[k] === 'string') c.keys[k] = b.keys[k].trim();
-  if (b.flags && typeof b.flags === 'object' && typeof b.flags.show_usage === 'boolean') c.flags.show_usage = b.flags.show_usage;
+  if (b.flags && typeof b.flags === 'object') {
+    if (typeof b.flags.show_usage === 'boolean') c.flags.show_usage = b.flags.show_usage;
+    if (typeof b.flags.show_activity === 'boolean') c.flags.show_activity = b.flags.show_activity;
+  }
   if (b.profile && typeof b.profile === 'object') c.profile = cleanProfile({ ...c.profile, ...b.profile });
   saveClient(c);
   res.json({ client: c, links: menuLinks(c) });
+});
+
+admin.get('/clients/:slug/activity', (req, res) => {
+  const c = getClient(String(req.params.slug));
+  if (!c) return res.status(404).json({ error: 'No such client.' });
+  res.json(readActivity(c.slug, { page: Number(req.query.page), per: Number(req.query.per), kind: String(req.query.kind || ''), ref: String(req.query.ref || '') }));
 });
 
 admin.get('/clients/:slug/credits', (req, res) => {
@@ -360,6 +395,32 @@ admin.post('/clients/:slug/credits', (req, res) => {
   else if (Number.isFinite(monthly)) c = setMonthly(c, monthly);
   else return res.status(400).json({ error: 'Send add (bonus credits for this month) or monthly (the allowance).' });
   res.json({ credits: creditsView(c), ledger: creditLedger(c.slug, 100) });
+});
+
+admin.get('/overview', (_req, res) => {
+  const clients = listClients();
+  const now = Date.now();
+  const dayStart = now - 86400000;
+  const monthStart = Date.UTC(new Date(now).getUTCFullYear(), new Date(now).getUTCMonth(), 1);
+  const rows = clients.map((c) => {
+    const acts = readActivity(c.slug, { per: 100 }).rows;
+    return { slug: c.slug, name: c.name, enabled: c.enabled, connected: lpReady(lpOf(c)), credits: creditsView(c), finders: listFinders(c.slug).length, last: acts[0] || null, acts };
+  });
+  const recent = rows.flatMap((r) => r.acts.map((a) => ({ ...a, items: undefined, client: r.name, slug: r.slug }))).sort((a, b) => b.t - a.t).slice(0, 20);
+  const all = rows.flatMap((r) => r.acts);
+  const totals = {
+    clients: rows.length,
+    connected: rows.filter((r) => r.connected).length,
+    finders: rows.reduce((n, r) => n + r.finders, 0),
+    credits_total: rows.reduce((n, r) => n + r.credits.total, 0),
+    credits_used: rows.reduce((n, r) => n + r.credits.used, 0),
+    credits_left: rows.reduce((n, r) => n + r.credits.left, 0),
+    clients_out: rows.filter((r) => r.credits.left <= 0).length,
+    pushed_month: all.filter((a) => (a.kind === 'push' || a.kind === 'finder') && a.t >= monthStart).reduce((n, a) => n + (a.n || 0), 0),
+    searches_month: all.filter((a) => a.kind === 'search' && a.t >= monthStart).length,
+    finder_runs_today: all.filter((a) => a.kind === 'finder' && a.t >= dayStart).length,
+  };
+  res.json({ totals, clients: rows.map(({ acts: _a, ...r }) => r), recent });
 });
 
 admin.get('/link', (_req, res) => {

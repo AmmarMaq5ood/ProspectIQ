@@ -142,7 +142,7 @@ export interface Client {
   };
   /** Monthly credits: one per lead added to Launchpad with a work email. `monthly` resets `used` on the 1st; `extra` is this month's bonus. */
   credits: { monthly: number; used: number; period: string; extra: number };
-  flags: { show_usage: boolean };
+  flags: { show_usage: boolean; show_activity: boolean };
   profile: Profile;
 }
 

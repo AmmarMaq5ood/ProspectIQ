@@ -5,6 +5,10 @@ import type { Me, Options } from './types';
 import { BusyProvider, useBusy } from './components/Busy';
 import { CreditsRing, TopProgress } from './components/Motion';
 import NotSetUp from './pages/NotSetUp';
+import Activity from './pages/Activity';
+import AdminOverview from './pages/AdminOverview';
+import AdminSettings from './pages/AdminSettings';
+import { ThemeToggle, useAdminTheme } from './components/Theme';
 import { Icon } from './components/Icon';
 import Login from './pages/Login';
 import Ask from './pages/Ask';
@@ -75,8 +79,10 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/admin" element={me.admin ? <AdminShell /> : <Navigate to="/login?admin=1" replace />}>
-            <Route index element={<Admin />} />
+            <Route index element={<AdminOverview />} />
+            <Route path="clients" element={<Admin />} />
             <Route path="clients/:slug" element={<AdminClient />} />
+            <Route path="settings" element={<AdminSettings />} />
           </Route>
           <Route path="/" element={me.client ? <Shell /> : <Navigate to={me.admin ? '/admin' : '/login'} replace />}>
             <Route index element={<Ask />} />
@@ -85,6 +91,7 @@ export default function App() {
             <Route path="industries" element={<Research key="industries" mode="industries" />} />
             <Route path="lookup" element={<Lookup />} />
             <Route path="finders" element={<Finders />} />
+            <Route path="activity" element={<Activity />} />
             <Route path="usage" element={<Usage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
@@ -125,37 +132,41 @@ function Shell() {
         <NavLink to="/industries" className={on}><Icon name="chart" />Industries</NavLink>
         <NavLink to="/lookup" className={on}><Icon name="link" />Company lookup</NavLink>
         <NavLink to="/finders" className={on}><Icon name="calendar" />Daily finders</NavLink>
-        {(c.show_usage || me.admin) && <NavLink to="/usage" className={on}><Icon name="clock" />Usage</NavLink>}
+        {(c.show_activity || me.admin) && <NavLink to="/activity" className={on}><Icon name="clock" />Activity</NavLink>}
+        {(c.show_usage || me.admin) && <NavLink to="/usage" className={on}><Icon name="chart" />Usage</NavLink>}
       </nav>
       <div className="page" key={loc.pathname}><Outlet /></div>
     </>
   );
 }
 
-/** The agency side: clients and their setup. */
+/** The agency side: a sidebar app with an overview, the clients, settings and dark mode. */
 function AdminShell() {
   const { me, reload } = useApp();
   const nav = useNavigate();
   const loc = useLocation();
   const busy = useBusy();
-  const signOut = async () => { await api('/auth/logout', { body: {} }); await reload(); nav('/login'); };
+  const [dark, setDark] = useAdminTheme();
+  const signOut = async () => { await api('/auth/logout', { body: {} }); setKey(''); await reload(); nav('/login'); };
   return (
-    <>
+    <div className="admin-app">
       <TopProgress active={busy.active} />
-      <header className="top">
-        <div className="ttl">
-          <h1>ProspectIQ <span className="badge">Agency admin</span></h1>
-          <p className="sub">Clients, their Launchpad connection, what they sell, their keys and their usage.</p>
-        </div>
-        <div className="ctrls">
-          {me.client && <Link className="btn secondary sm" to="/"><Icon name="spark" />Open the app as {me.client.name}</Link>}
+      <aside className="side">
+        <div className="brand"><Icon name="spark" />ProspectIQ <span>Admin</span></div>
+        <nav aria-label="Admin">
+          <NavLink to="/admin" end className={on}><Icon name="home" />Overview</NavLink>
+          <NavLink to="/admin/clients" className={on}><Icon name="people" />Clients</NavLink>
+          <NavLink to="/admin/settings" className={on}><Icon name="settings" />Settings</NavLink>
+        </nav>
+        <div className="side-foot">
+          <ThemeToggle dark={dark} onChange={setDark} />
+          {me.client && <Link className="btn secondary sm" to="/"><Icon name="spark" />Open as {me.client.name}</Link>}
           <button className="btn ghost sm" type="button" onClick={signOut}>Sign out</button>
         </div>
-      </header>
-      <nav className="tabs" aria-label="Admin">
-        <NavLink to="/admin" end className={on}><Icon name="people" />Clients</NavLink>
-      </nav>
-      <div className="page" key={loc.pathname}><Outlet /></div>
-    </>
+      </aside>
+      <main className="main">
+        <div className="page" key={loc.pathname}><Outlet /></div>
+      </main>
+    </div>
   );
 }

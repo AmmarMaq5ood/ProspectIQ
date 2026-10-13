@@ -8,6 +8,7 @@ import { usageCompute } from './usage.js';
 import { draftNote, roleFromTitle, sizeBucket } from './launchpad.js';
 import { matchesPerson, normCo } from './lpindex.js';
 import { creditCheck, creditsLeft, currentPeriod, resetDate } from './credits.js';
+import { logActivity, readActivity } from './activity.js';
 import type { Client, Finder, UsageRow } from './types.js';
 
 /** Pure checks, no network: the parser, filters, samples, schedule maths, usage, drafting. */
@@ -62,7 +63,7 @@ ok('next run from Sat is Mon 08:30', new Intl.DateTimeFormat('en-US', { timeZone
 ok('describe', describe({ ...fd, start: 0 }, tz) === '5 a day at 08:30, weekdays');
 ok('not twice a day', !isDue({ ...fd, last_run: mon - 60000 }, tz, mon));
 
-const client: Client = { slug: 'test', name: 'Test', access_key: 'k', enabled: true, created: 0, launchpad: { location_id: '', token: '', app_url: '', pipeline: 'Business Development', quote_stage: '', owner: '', timezone: tz, users: {} }, keys: { openai: '', openai_model: '', apollo: '' }, credits: { monthly: 1000, used: 0, period: '2026-10', extra: 0 }, flags: { show_usage: false }, profile: ARTMARK_PROFILE };
+const client: Client = { slug: 'test', name: 'Test', access_key: 'k', enabled: true, created: 0, launchpad: { location_id: '', token: '', app_url: '', pipeline: 'Business Development', quote_stage: '', owner: '', timezone: tz, users: {} }, keys: { openai: '', openai_model: '', apollo: '' }, credits: { monthly: 1000, used: 0, period: '2026-10', extra: 0 }, flags: { show_usage: false, show_activity: true }, profile: ARTMARK_PROFILE };
 process.env.DATA_DIR = process.env.DATA_DIR || './data-test';
 const run = await runFinder(client, { ...fd, per_run: 4 }, false);
 ok('finder sample run: 4 leads, nothing written', run.ok && run.pushed.length === 4 && /Sample run/.test(run.text) && run.seen.length >= 4);
@@ -86,5 +87,10 @@ ok('different company, no email: no match; same email: match', !matchesPerson(lp
 const cr = (monthly: number, used: number, extra = 0) => ({ ...client, credits: { monthly, used, period: '2026-10', extra } });
 ok('credit check', creditCheck(cr(10, 10), 1).startsWith('You are out of credits. Your 10 monthly credits reset on') && creditCheck(cr(10, 8), 3).includes('Only 2 credits left') && creditCheck(cr(10, 8), 2) === '' && creditsLeft(cr(5, 9)) === 0 && creditsLeft(cr(5, 5, 3)) === 3);
 ok('period + reset date in a timezone', currentPeriod('America/New_York', Date.UTC(2026, 10, 1, 2, 0)) === '2026-10' && resetDate('America/New_York', Date.UTC(2026, 10, 1, 2, 0)).iso === '2026-11-01' && resetDate('UTC', Date.UTC(2026, 11, 15)).label === 'Jan 1, 2027');
+
+for (let k = 0; k < 7; k++) logActivity('test', { kind: k % 2 ? 'push' : 'finder', title: `event ${k}`, by: 'client', ok: true, credits: k, ref: k % 2 ? '' : 'f1' });
+const pg = readActivity('test', { page: 2, per: 5 });
+ok('activity paging newest first', pg.total === 7 && pg.pages === 2 && pg.page === 2 && pg.rows.map((r) => r.title).join() === 'event 1,event 0');
+ok('activity filters', readActivity('test', { kind: 'push' }).total === 3 && readActivity('test', { ref: 'f1' }).total === 4 && readActivity('test', { page: 99, per: 10 }).page === 1);
 
 console.log(process.exitCode ? `FAILURES in ${n} checks` : `all ${n} checks pass`);

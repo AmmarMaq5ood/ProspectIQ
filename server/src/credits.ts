@@ -2,6 +2,7 @@ import path from 'node:path';
 import { appendLine, clientDir, readLines } from './store.js';
 import { agencySettings, getClient, saveClient } from './clients.js';
 import type { Client, CreditEntry } from './types.js';
+import { logActivity } from './activity.js';
 
 /**
  * Monthly credits. Searching is free; one credit is spent for each lead that
@@ -47,7 +48,10 @@ export function rollover(c: Client, save = true): boolean {
   c.credits = { ...c.credits, used: 0, extra: 0, period };
   if (save) {
     saveClient(c);
-    if (had) appendLine(file(c.slug), { t: Date.now(), delta: 0, reason: `monthly reset (${period}): ${c.credits.monthly.toLocaleString('en-US')} credits`, by: 'system', left: creditsLeft(c) } satisfies CreditEntry);
+    if (had) {
+      appendLine(file(c.slug), { t: Date.now(), delta: 0, reason: `monthly reset (${period}): ${c.credits.monthly.toLocaleString('en-US')} credits`, by: 'system', left: creditsLeft(c) } satisfies CreditEntry);
+      logActivity(c.slug, { kind: 'credits', title: 'Monthly credits reset', detail: `${c.credits.monthly.toLocaleString('en-US')} credits for ${period}`, by: 'system', ok: true });
+    }
   }
   return true;
 }
@@ -73,6 +77,7 @@ export function addCredits(client: Client, n: number, reason: string, by = 'admi
   c.credits.extra = Math.max(0, (c.credits.extra || 0) + Math.round(n));
   saveClient(c);
   appendLine(file(c.slug), { t: Date.now(), delta: Math.round(n), reason: `${reason} (this month)`, by, left: creditsLeft(c) } satisfies CreditEntry);
+  logActivity(c.slug, { kind: 'credits', title: n > 0 ? `${Math.round(n).toLocaleString('en-US')} bonus credits added for this month` : `${Math.abs(Math.round(n)).toLocaleString('en-US')} credits removed for this month`, detail: `${creditsLeft(c).toLocaleString('en-US')} left`, by: by as 'admin', ok: true });
   return c;
 }
 
@@ -85,6 +90,7 @@ export function setMonthly(client: Client, monthly: number, by = 'admin'): Clien
   c.credits.monthly = next;
   saveClient(c);
   appendLine(file(c.slug), { t: Date.now(), delta, reason: `monthly allowance set to ${next.toLocaleString('en-US')}`, by, left: creditsLeft(c) } satisfies CreditEntry);
+  logActivity(c.slug, { kind: 'credits', title: `Monthly allowance set to ${next.toLocaleString('en-US')}`, detail: `${creditsLeft(c).toLocaleString('en-US')} left this month`, by: by as 'admin', ok: true });
   return c;
 }
 

@@ -8,10 +8,11 @@ import { Errors, Notice } from '../components/ui';
 import { CreditsRing, Num, Switch } from '../components/Motion';
 import { fmtWhen, nf } from '../api';
 import Usage from './Usage';
+import Activity from './Activity';
 import type { Angle, Client, CreditEntry, Credits, FinderView, MenuLink, Profile } from '../types';
 
-type Tab = 'launchpad' | 'profile' | 'templates' | 'credits' | 'keys' | 'access' | 'finders' | 'usage';
-const TABS: [Tab, string][] = [['launchpad', 'Launchpad connection'], ['profile', 'Profile'], ['templates', 'Templates'], ['credits', 'Credits & visibility'], ['keys', 'Keys'], ['access', 'Access & links'], ['finders', 'Finders'], ['usage', 'Usage']];
+type Tab = 'launchpad' | 'profile' | 'templates' | 'credits' | 'keys' | 'access' | 'finders' | 'activity' | 'usage';
+const TABS: [Tab, string, string][] = [['launchpad', 'Launchpad connection', 'link'], ['profile', 'Profile', 'building'], ['templates', 'Templates', 'list'], ['credits', 'Credits & visibility', 'chart'], ['keys', 'Keys', 'key'], ['access', 'Access & links', 'external'], ['finders', 'Finders', 'calendar'], ['activity', 'Activity', 'clock'], ['usage', 'Usage', 'chart']];
 
 interface Loaded { client: Client; links: MenuLink[]; finders: FinderView[] }
 
@@ -46,15 +47,21 @@ export default function AdminClient() {
 
   return (
     <>
-      <div className="rowtools" style={{ marginBottom: 14 }}>
-        <Link className="btn ghost sm" to="/admin"><Icon name="chevron" />All clients</Link>
-        <h2 style={{ margin: 0, fontSize: 18 }}>{data.client.name} <span className="status">{c.slug}</span></h2>
-        {!c.enabled && <span className="pill bad">disabled</span>}
-        <span className="hint" style={{ marginLeft: 'auto' }}>{data.client.launchpad.token && data.client.launchpad.location_id ? 'Launchpad connected' : 'Launchpad not connected yet'}</span>
+      <div className="page-head">
+        <Link className="btn ghost sm" to="/admin/clients"><Icon name="chevron" />Clients</Link>
+        <h1>{data.client.name} <span className="status">{c.slug}</span></h1>
+        <span className="head-pills">
+          {data.client.launchpad.token && data.client.launchpad.location_id ? <span className="pill good">Launchpad connected</span> : <span className="pill bad">not connected</span>}
+          <span className="pill">{nf(Math.max(0, c.credits.monthly + c.credits.extra - c.credits.used))} credits left</span>
+          {!c.enabled && <span className="pill bad">disabled</span>}
+        </span>
+        <a className="btn secondary sm" href={`${import.meta.env.BASE_URL}?key=${encodeURIComponent(c.access_key)}`} target="_blank" rel="noopener" style={{ marginLeft: 'auto' }}><Icon name="external" />Open as this client</a>
       </div>
-      <nav className="ptabs" role="tablist" style={{ marginBottom: 14 }}>
-        {TABS.map(([k, label]) => <button key={k} type="button" role="tab" className={tab === k ? 'on' : ''} onClick={() => { setTab(k); setOk(''); setErr(''); }}>{label}</button>)}
-      </nav>
+      <div className="client-layout">
+        <nav className="subnav" aria-label="Sections">
+          {TABS.map(([k, label, icon]) => <button key={k} type="button" className={tab === k ? 'on' : ''} onClick={() => { setTab(k); setOk(''); setErr(''); }}><Icon name={icon} />{label}</button>)}
+        </nav>
+        <div className="subpane">
       {ok && <Notice kind="ok"><p>{ok}</p></Notice>}
       <Errors errors={err ? [err] : []} />
 
@@ -68,7 +75,7 @@ export default function AdminClient() {
         } catch (e) { setErr(errText(e)); }
       }} />}
       {tab === 'templates' && <TemplatesTab c={c} set={set} onSave={() => save({ profile: c.profile }, 'Templates')} />}
-      {tab === 'credits' && <CreditsTab c={c} slug={slug} onToggleUsage={(v) => { set((x) => { x.flags.show_usage = v; }); save({ flags: { show_usage: v } }, 'Visibility'); }} />}
+      {tab === 'credits' && <CreditsTab c={c} slug={slug} onToggleUsage={(v) => { set((x) => { x.flags.show_usage = v; }); save({ flags: { show_usage: v } }, 'Visibility'); }} onToggleActivity={(v) => { set((x) => { x.flags.show_activity = v; }); save({ flags: { show_activity: v } }, 'Visibility'); }} />}
       {tab === 'keys' && <KeysTab c={c} set={set} onSave={() => save({ keys: c.keys }, 'Keys')} />}
       {tab === 'access' && <AccessTab c={c} links={data.links} set={set} onSave={() => save({ enabled: c.enabled, name: c.name }, 'Access')} onRotate={async () => {
         if (!confirm('Rotate the access key? The old menu links stop working until you update them in Launchpad.')) return;
@@ -89,7 +96,10 @@ export default function AdminClient() {
           ) : <p className="empty">None yet.</p>}
         </section>
       )}
+      {tab === 'activity' && <Activity adminSlug={slug} timezone={c.launchpad.timezone} client={{ launchpad_app: c.launchpad.app_url, location_id: c.launchpad.location_id }} />}
       {tab === 'usage' && <Usage adminSlug={slug} timezone={c.launchpad.timezone} />}
+        </div>
+      </div>
     </>
   );
 }
@@ -227,7 +237,7 @@ function KeysTab({ c, set, onSave }: { c: Client; set: (fn: (x: Client) => void)
   );
 }
 
-function CreditsTab({ c, slug, onToggleUsage }: { c: Client; slug: string; onToggleUsage: (v: boolean) => void }) {
+function CreditsTab({ c, slug, onToggleUsage, onToggleActivity }: { c: Client; slug: string; onToggleUsage: (v: boolean) => void; onToggleActivity: (v: boolean) => void }) {
   const [cr, setCr] = useState<{ credits: Credits; ledger: CreditEntry[] } | null>(null);
   const [add, setAdd] = useState(100);
   const [monthly, setMonthly] = useState(c.credits.monthly);
@@ -263,8 +273,11 @@ function CreditsTab({ c, slug, onToggleUsage }: { c: Client; slug: string; onTog
       </section>
       <section className="card" style={{ marginBottom: 12 }}>
         <h2>What the client sees</h2>
-        <p className="sub">Clients always see their credits left in the header. The Usage tab (searches, lookups, tokens, never cost) is off unless you switch it on here. Cost is only ever shown in this admin panel.</p>
-        <Switch on={c.flags.show_usage} onChange={onToggleUsage} label={c.flags.show_usage ? 'Usage tab is shown to this client' : 'Usage tab is hidden from this client'} />
+        <p className="sub">Clients always see their credits left in the header. The Activity tab lists every finder run, push and search with the credits each used. The Usage tab (searches, lookups, tokens, never cost) is off unless you switch it on. Cost is only ever shown in this admin panel.</p>
+        <div className="pills-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 10 }}>
+          <Switch on={c.flags.show_activity !== false} onChange={onToggleActivity} label={c.flags.show_activity !== false ? 'Activity tab is shown to this client' : 'Activity tab is hidden from this client'} />
+          <Switch on={c.flags.show_usage} onChange={onToggleUsage} label={c.flags.show_usage ? 'Usage tab is shown to this client' : 'Usage tab is hidden from this client'} />
+        </div>
       </section>
       <section className="card">
         <h2>Credit history</h2>

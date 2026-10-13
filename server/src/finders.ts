@@ -10,6 +10,7 @@ import { fitLines, type LlmCtx } from './llm.js';
 import { lpOf, lpReady } from './launchpad.js';
 import { annotateInLaunchpad } from './lpindex.js';
 import { creditsLeft, outOfCreditsText, spendCredits } from './credits.js';
+import { logActivity } from './activity.js';
 import { pushCompanies, pushPeople } from './push.js';
 import type { Client, Finder, Org, Person } from './types.js';
 
@@ -177,11 +178,12 @@ export async function runFinder(client: Client, f: Finder, live: boolean): Promi
   return { ok, text, pushed, credits, spent, left: nowLeft, skipped, seen: seenOut };
 }
 
-export async function runAndSave(client: Client, id: string, live: boolean): Promise<RunResult> {
+export async function runAndSave(client: Client, id: string, live: boolean, by: 'finder' | 'client' = 'finder'): Promise<RunResult> {
   const all = listFinders(client.slug);
   const i = all.findIndex((f) => f.id === id);
   if (i < 0) return { ok: false, text: 'Finder not found.', pushed: [], credits: 0, spent: 0, left: 0, skipped: 0, seen: [] };
   const r = await runFinder(client, all[i], live);
+  if (live) logActivity(client.slug, { kind: 'finder', title: all[i].name, detail: r.text, credits: r.spent, by, ok: r.ok, n: r.pushed.length, items: r.pushed.map((p) => ({ name: p.name, company: p.company, id: p.id })), ref: all[i].id });
   if (live && (r.ok || r.pushed.length)) {
     all[i].last_run = Date.now();
     all[i].last_result = r.text;
