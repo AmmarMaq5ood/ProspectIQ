@@ -208,7 +208,21 @@ html[data-admin-theme="dark"] .admin-app input, html[data-admin-theme="dark"] .a
 html[data-admin-theme="dark"] .admin-app .kv code, html[data-admin-theme="dark"] .admin-app .keybox, html[data-admin-theme="dark"] .admin-app .secret button { background: var(--surface-2); color: var(--text); border-color: var(--border); }
 html[data-admin-theme="dark"] .admin-app table, html[data-admin-theme="dark"] .admin-app th, html[data-admin-theme="dark"] .admin-app td { border-color: var(--border); }
 html[data-admin-theme="dark"] .admin-app th { background: var(--surface-2); }
-html[data-admin-theme="dark"] .admin-app .clients tr:hover td { background: var(--surface-2); }
+html[data-admin-theme="dark"] .admin-app tbody tr:nth-child(even) td, html[data-admin-theme="dark"] .admin-app tbody tr:hover td, html[data-admin-theme="dark"] .admin-app .clients tr:hover td { background: var(--surface-2); }
+html[data-admin-theme="dark"] .admin-app tbody tr:nth-child(even):hover td { background: #1b2740; }
+html[data-admin-theme="dark"] .admin-app .kpi, html[data-admin-theme="dark"] .admin-app .tpl, html[data-admin-theme="dark"] .admin-app .finder, html[data-admin-theme="dark"] .admin-app .tplg .g, html[data-admin-theme="dark"] .admin-app .lead, html[data-admin-theme="dark"] .admin-app .login-card { background: var(--surface); border-color: var(--border); }
+html[data-admin-theme="dark"] .admin-app .lead .fit { background: var(--surface-2); color: var(--text-2); }
+html[data-admin-theme="dark"] .admin-app .ev-icon { background: var(--surface-2); border-color: var(--border); }
+html[data-admin-theme="dark"] .admin-app .ev-push .ev-icon { background: var(--good-soft); }
+html[data-admin-theme="dark"] .admin-app .ev-search .ev-icon { background: var(--primary-soft); }
+html[data-admin-theme="dark"] .admin-app .ev-credits .ev-icon { background: var(--warn-soft); }
+html[data-admin-theme="dark"] .admin-app .ev.failed .ev-icon { background: var(--bad-soft); }
+html[data-admin-theme="dark"] .admin-app .credits { background: var(--surface); border-color: var(--border); }
+html[data-admin-theme="dark"] .admin-app .pill { border-color: var(--border-2); color: var(--text-3); }
+html[data-admin-theme="dark"] .admin-app .pill.good { color: #4ade80; border-color: #166534; }
+html[data-admin-theme="dark"] .admin-app .pill.bad { color: #f87171; border-color: #7f1d1d; }
+html[data-admin-theme="dark"] .admin-app .pill.blue { color: #93b4ff; border-color: #2f508f; }
+html[data-admin-theme="dark"] .admin-app .status, html[data-admin-theme="dark"] .admin-app .hint, html[data-admin-theme="dark"] .admin-app .empty, html[data-admin-theme="dark"] .admin-app .foot { color: var(--muted); }
 html[data-admin-theme="dark"] .admin-app .ask-kicker.dark { color: #93b4ff; background: var(--primary-soft); border-color: var(--primary-line); }
 html[data-admin-theme="dark"] .admin-app .bars .lbl { color: var(--text-3); }
 html[data-admin-theme="dark"] .admin-app .topprog::before { background: linear-gradient(90deg, #6b98ff, #a78bfa, #6b98ff); }
