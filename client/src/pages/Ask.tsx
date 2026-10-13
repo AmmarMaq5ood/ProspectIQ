@@ -5,17 +5,18 @@ import { useApp } from '../App';
 import { useBusy } from '../components/Busy';
 import { FindersList } from '../components/FindersList';
 import { Icon } from '../components/Icon';
-import { Errors, Notice, Pager, PerPage, PushedCompanies, PushedPeople } from '../components/ui';
+import { Errors, InLp, LpFilter, Notice, Pager, PerPage, PushedCompanies, PushedPeople } from '../components/ui';
 import { roleFromTitle } from '../roles';
 import type { AskResult, CompaniesPushed, Kind, Org, PeoplePushed, Person, RecentSearch } from '../types';
 
 /** The Ask tab: plain words in, leads out; tick, push; save as a daily finder. */
 export default function Ask() {
-  const { me, options } = useApp();
+  const { me, options, reload } = useApp();
   const c = me.client!;
   const busy = useBusy();
   const nav = useNavigate();
   const [params, setParams] = useSearchParams();
+  const [hideLp, setHideLp] = useState(false);
   const q = (params.get('q') || '').trim();
   const page = Math.max(1, Number(params.get('page')) || 1);
   const pp = options.per_page.includes(Number(params.get('pp'))) ? Number(params.get('pp')) : 10;
@@ -79,13 +80,18 @@ export default function Ask() {
   };
   const submit = (e: FormEvent) => { e.preventDefault(); if (text.trim()) go(text.trim()); };
 
-  const rows = res?.result.rows || [];
+  const allRows = res?.result.rows || [];
   const kind: Kind = res?.kind || 'people';
   const isPeople = kind === 'people';
+  const inLp = (r: Person | Org) => isPeople && !!(r as Person).in_lp;
+  const nLp = allRows.filter(inLp).length;
+  const rows = hideLp ? allRows.filter((r) => !inLp(r)) : allRows;
   const withEmail = (r: Person | Org) => isPeople && (!!(r as Person).has_email || !!(r as Person).email);
   const nSel = rows.filter((r) => picks.has(r.id)).length;
   const nEmail = rows.filter((r) => picks.has(r.id) && withEmail(r)).length;
-  const pick = (mode: 'all' | 'none' | 'email') => setPicks(new Set(rows.filter((r) => mode === 'all' || (mode === 'email' && withEmail(r))).map((r) => r.id)));
+  const left = c.credits.left;
+  const blocked = isPeople && (left <= 0 || nEmail > left);
+  const pick = (mode: 'all' | 'none' | 'email' | 'new') => setPicks(new Set(rows.filter((r) => mode === 'all' || (mode === 'email' && withEmail(r)) || (mode === 'new' && !inLp(r))).map((r) => r.id)));
   const toggle = (id: string, on: boolean) => setPicks((s) => { const n = new Set(s); if (on) n.add(id); else n.delete(id); return n; });
 
   const push = async () => {
@@ -99,6 +105,7 @@ export default function Ask() {
         setPushed({ kind, companies: r });
       }
       setPicks(new Set());
+      await reload();
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (e) {
       setErr(errText(e));
@@ -227,10 +234,13 @@ export default function Ask() {
             </div>
             {rows.length ? (
               <>
-                <p className="sel-line">Select <a onClick={() => pick('all')}>all on this page</a> · <a onClick={() => pick('none')}>none</a>{isPeople && <> · <a onClick={() => pick('email')}>only those with an email</a></>}</p>
+                <div className="filters-row">
+                  <p className="sel-line" style={{ margin: 0 }}>Select <a onClick={() => pick('all')}>all on this page</a> · <a onClick={() => pick('none')}>none</a>{isPeople && <> · <a onClick={() => pick('email')}>only those with an email</a>{nLp > 0 && <> · <a onClick={() => pick('new')}>only new to Launchpad</a></>}</>}</p>
+                  <LpFilter n={nLp} hide={hideLp} onChange={setHideLp} />
+                </div>
                 <div className="cards">
                   {rows.map((r) => (
-                    <label className="lead" key={r.id}>
+                    <label className={`lead${inLp(r) ? ' dim' : ''}`} key={r.id}>
                       <input type="checkbox" checked={picks.has(r.id)} onChange={(e) => toggle(r.id, e.target.checked)} />
                       {isPeople ? <PersonCard p={r as Person} roles={c.profile.roles} role={roles[r.id]} onRole={(v) => setRoles((m) => ({ ...m, [r.id]: v }))} fit={res.fits[r.id] || ''} /> : <OrgCard o={r as Org} fit={res.fits[r.id] || ''} onPeople={() => nav(peopleAtHref((r as Org).domain))} />}
                     </label>
@@ -242,9 +252,11 @@ export default function Ask() {
           </div>
           {rows.length > 0 && (
             <div className="pushbar">
-              <span className="cnt"><b>{nSel}</b> selected{isPeople ? <> · up to <b>{nEmail}</b> lookup credits · creates the company, the contacts with roles, a research note and the outreach deal</> : ' · creates a company record for each'}</span>
+              <span className="cnt"><b>{nSel}</b> selected{isPeople ? <> · uses up to <b>{nEmail}</b> of your <b>{nf(left)}</b> credits · creates the company, the contacts with roles, a research note and the outreach deal</> : ' · creates a company record for each'}</span>
               {me.sample && <span className="hint">Sample mode: pushing is off.</span>}
-              <button className="btn" type="button" onClick={push} disabled={me.sample || nSel === 0}><Icon name="push" />Push to Launchpad</button>
+              {!me.sample && isPeople && left <= 0 && <span className="warn">No credits left: ask your Launchpad team to top up.</span>}
+              {!me.sample && isPeople && left > 0 && nEmail > left && <span className="warn">Only {nf(left)} credits left: untick {nEmail - left}.</span>}
+              <button className="btn" type="button" onClick={push} disabled={me.sample || nSel === 0 || blocked}><Icon name="push" />Push to Launchpad</button>
             </div>
           )}
 
@@ -288,6 +300,7 @@ function PersonCard({ p, roles, role, onRole, fit }: { p: Person; roles: string[
         <div className="nm">{name} <span className="st">· {p.title}</span></div>
         <div className="st">{p.company}{p.domain && ` · ${p.domain}`}{p.city && ` · ${p.city}`}</div>
         <div className="pills">
+          <InLp p={p} />
           {(p.has_email || p.email) && <span className="pill good">email</span>}
           {p.has_phone && <span className="pill">phone</span>}
           {(p.has_city || p.city) && <span className="pill">location</span>}

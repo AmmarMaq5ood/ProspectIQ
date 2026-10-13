@@ -5,11 +5,13 @@ import { useBusy } from '../components/Busy';
 import { Chips } from '../components/Chips';
 import { Icon } from '../components/Icon';
 import { Errors, Notice } from '../components/ui';
+import { CreditsRing, Num, Switch } from '../components/Motion';
+import { fmtWhen, nf } from '../api';
 import Usage from './Usage';
-import type { Angle, Client, FinderView, MenuLink, Profile } from '../types';
+import type { Angle, Client, CreditEntry, Credits, FinderView, MenuLink, Profile } from '../types';
 
-type Tab = 'launchpad' | 'profile' | 'templates' | 'keys' | 'access' | 'finders' | 'usage';
-const TABS: [Tab, string][] = [['launchpad', 'Launchpad connection'], ['profile', 'Profile'], ['templates', 'Templates'], ['keys', 'Keys & limits'], ['access', 'Access & links'], ['finders', 'Finders'], ['usage', 'Usage']];
+type Tab = 'launchpad' | 'profile' | 'templates' | 'credits' | 'keys' | 'access' | 'finders' | 'usage';
+const TABS: [Tab, string][] = [['launchpad', 'Launchpad connection'], ['profile', 'Profile'], ['templates', 'Templates'], ['credits', 'Credits & visibility'], ['keys', 'Keys'], ['access', 'Access & links'], ['finders', 'Finders'], ['usage', 'Usage']];
 
 interface Loaded { client: Client; links: MenuLink[]; finders: FinderView[] }
 
@@ -66,7 +68,8 @@ export default function AdminClient() {
         } catch (e) { setErr(errText(e)); }
       }} />}
       {tab === 'templates' && <TemplatesTab c={c} set={set} onSave={() => save({ profile: c.profile }, 'Templates')} />}
-      {tab === 'keys' && <KeysTab c={c} set={set} onSave={() => save({ keys: c.keys, limits: c.limits }, 'Keys and limits')} />}
+      {tab === 'credits' && <CreditsTab c={c} slug={slug} onToggleUsage={(v) => { set((x) => { x.flags.show_usage = v; }); save({ flags: { show_usage: v } }, 'Visibility'); }} />}
+      {tab === 'keys' && <KeysTab c={c} set={set} onSave={() => save({ keys: c.keys }, 'Keys')} />}
       {tab === 'access' && <AccessTab c={c} links={data.links} set={set} onSave={() => save({ enabled: c.enabled, name: c.name }, 'Access')} onRotate={async () => {
         if (!confirm('Rotate the access key? The old menu links stop working until you update them in Launchpad.')) return;
         try { const r = await api<{ client: Client; links: MenuLink[] }>(`/admin/clients/${encodeURIComponent(slug)}/rotate-key`, { body: {} }); setData((d) => (d ? { ...d, client: r.client, links: r.links } : d)); setC(structuredClone(r.client)); setOk('New access key issued.'); } catch (e) { setErr(errText(e)); }
@@ -212,16 +215,66 @@ function KeysTab({ c, set, onSave }: { c: Client; set: (fn: (x: Client) => void)
   const k = c.keys;
   return (
     <section className="card">
-      <h2>Keys & limits</h2>
+      <h2>Keys</h2>
       <p className="sub">Leave a key blank to use the agency key from the server's .env. Set one here when the client pays for their own.</p>
       <div className="form-grid">
         <div><label className="f" htmlFor="ko">OpenAI key (GPT reads requests and writes fit lines)</label><Secret id="ko" value={k.openai} placeholder="sk-… (blank = agency key)" onChange={(v) => set((x) => { x.keys.openai = v; })} /></div>
         <div><label className="f" htmlFor="km">OpenAI model</label><input type="text" id="km" value={k.openai_model} placeholder="blank = agency default (gpt-6-luna)" onChange={(e) => set((x) => { x.keys.openai_model = e.target.value; })} /></div>
         <div><label className="f" htmlFor="ka">Research database key</label><Secret id="ka" value={k.apollo} placeholder="blank = agency key" onChange={(v) => set((x) => { x.keys.apollo = v; })} /></div>
-        <div><label className="f" htmlFor="kl">Lookup credits per month (0 = no cap, informational for now)</label><input type="number" id="kl" min={0} value={c.limits.credits_per_month} onChange={(e) => set((x) => { x.limits.credits_per_month = Math.max(0, Number(e.target.value) || 0); })} /></div>
       </div>
       <SaveBar hint="Keys are stored on the server in the client's record, never shown to the client." label="Save keys" onSave={onSave} />
     </section>
+  );
+}
+
+function CreditsTab({ c, slug, onToggleUsage }: { c: Client; slug: string; onToggleUsage: (v: boolean) => void }) {
+  const [cr, setCr] = useState<{ credits: Credits; ledger: CreditEntry[] } | null>(null);
+  const [add, setAdd] = useState(100);
+  const [total, setTotal] = useState(c.credits.total);
+  const [err, setErr] = useState('');
+  const load = () => api<{ credits: Credits; ledger: CreditEntry[] }>(`/admin/clients/${encodeURIComponent(slug)}/credits`).then((r) => { setCr(r); setTotal(r.credits.total); }).catch((e) => setErr(errText(e)));
+  useEffect(() => { load(); }, [slug]);
+  const post = async (body: Record<string, unknown>) => {
+    setErr('');
+    try { const r = await api<{ credits: Credits; ledger: CreditEntry[] }>(`/admin/clients/${encodeURIComponent(slug)}/credits`, { body }); setCr(r); setTotal(r.credits.total); }
+    catch (e) { setErr(errText(e)); }
+  };
+  const cur = cr?.credits || { total: c.credits.total, used: c.credits.used, left: Math.max(0, c.credits.total - c.credits.used) };
+  return (
+    <>
+      <section className="card" style={{ marginBottom: 12 }}>
+        <h2>Credit pool</h2>
+        <p className="sub">One credit per lead added to Launchpad as a new contact with a work email. Searching is free. The pool is one-time: top it up here when it runs low. At zero, pushes and finders stop until you do.</p>
+        {err && <Notice kind="err"><p>{err}</p></Notice>}
+        <div className="credits-card">
+          <CreditsRing big total={cur.total} used={cur.used} left={cur.left} />
+          <dl className="kv">
+            <dt>Pool</dt><dd><b><Num value={cur.total} /></b></dd>
+            <dt>Used</dt><dd><Num value={cur.used} /></dd>
+            <dt>Left</dt><dd><Num value={cur.left} /></dd>
+          </dl>
+        </div>
+        <div className="form-grid" style={{ marginTop: 16 }}>
+          <div><label className="f" htmlFor="cadd">Add credits</label><div className="search-row"><input type="number" id="cadd" min={1} step={50} value={add} onChange={(e) => setAdd(Math.max(1, Number(e.target.value) || 1))} /><button className="btn" type="button" onClick={() => post({ add, reason: 'top-up' })}><Icon name="plus" />Add</button></div></div>
+          <div><label className="f" htmlFor="ctot">Or set the pool total</label><div className="search-row"><input type="number" id="ctot" min={0} step={50} value={total} onChange={(e) => setTotal(Math.max(0, Number(e.target.value) || 0))} /><button className="btn secondary" type="button" onClick={() => post({ total })}>Set total</button></div></div>
+        </div>
+      </section>
+      <section className="card" style={{ marginBottom: 12 }}>
+        <h2>What the client sees</h2>
+        <p className="sub">Clients always see their credits left in the header. The Usage tab (searches, lookups, tokens, never cost) is off unless you switch it on here. Cost is only ever shown in this admin panel.</p>
+        <Switch on={c.flags.show_usage} onChange={onToggleUsage} label={c.flags.show_usage ? 'Usage tab is shown to this client' : 'Usage tab is hidden from this client'} />
+      </section>
+      <section className="card">
+        <h2>Credit history</h2>
+        <p className="sub">Newest first. Spends come from pushes and finders; top-ups from this page.</p>
+        {cr && cr.ledger.length ? (
+          <table className="ledger">
+            <thead><tr><th scope="col">When</th><th scope="col" className="num">Change</th><th scope="col">Reason</th><th scope="col">By</th><th scope="col" className="num">Left after</th></tr></thead>
+            <tbody>{cr.ledger.map((e, i) => <tr key={i}><td>{fmtWhen(e.t, c.launchpad.timezone)}</td><td className={`num ${e.delta < 0 ? 'neg' : 'pos'}`}>{e.delta > 0 ? '+' : ''}{nf(e.delta)}</td><td>{e.reason}</td><td>{e.by}</td><td className="num">{nf(e.left)}</td></tr>)}</tbody>
+          </table>
+        ) : <p className="empty">Nothing yet. The first push or top-up starts the history.</p>}
+      </section>
+    </>
   );
 }
 

@@ -1,15 +1,17 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import path from 'node:path';
 import { config } from './config.js';
-import { createClient, deleteClient, effectiveKeys, getClient, getClientByKey, listClients, newKey, publicClient, saveClient } from './clients.js';
+import { createClient, deleteClient, effectiveKeys, getClient, getClientByKey, getClientByLocation, listClients, newKey, publicClient, rotateLinkSecret, saveClient, agencySettings, universalLink } from './clients.js';
+import { addCredits, creditCheck, creditLedger, creditsLeft, setCreditsTotal, spendCredits } from './credits.js';
+import { annotateInLaunchpad, markPushed } from './lpindex.js';
 import { DEPARTMENTS, EMAIL_STATUS, EMPLOYEE_RANGES, FUNDING, PER_PAGE, SENIORITY, enrichPerson, orgByDomain, planLimits, searchCompanies, searchPeople, type ApolloCtx } from './apollo.js';
 import { cleanFilters, cleanIntent, filtersActive, intentFilters, normDomain } from './rules.js';
 import { askIntent, draftProfile, fitLines, siteText, type LlmCtx } from './llm.js';
 import { sampleCompanies, sampleEnrich, sampleLookup, samplePeople } from './samples.js';
 import { draftNote, lpOf, lpReady, lpUrl, pushProspect, roleFromTitle, sizeBucket, testConnection } from './launchpad.js';
-import { pushCompanies, pushPeople } from './push.js';
+import { countSpent, pushCompanies, pushPeople } from './push.js';
 import { createFinder, describe, listFinders, nextRun, runAndSave, saveFinders } from './finders.js';
-import { usageCompute, usageRead } from './usage.js';
+import { usageCompute, usageRead, type UsageSummary } from './usage.js';
 import { clientDir, readJson, writeJson } from './store.js';
 import type { Client, Finder, Org, Person, Profile, RecentSearch } from './types.js';
 
@@ -34,6 +36,17 @@ api.post('/auth/key', (req, res) => {
   const client = getClientByKey(key);
   if (!client) return res.status(401).json({ error: 'That access key is not valid.' });
   res.cookie('piq_client', key, cookieOpts(req));
+  res.json({ ok: true, client: publicClient(client) });
+});
+
+api.post('/auth/location', (req, res) => {
+  const loc = String(req.body?.loc || '').trim();
+  const k = String(req.body?.k || '');
+  if (!k || k !== agencySettings().link_secret) return res.status(401).json({ error: 'This link is not valid. Ask your Launchpad team for a new one.' });
+  if (!loc || loc.includes('{{')) return res.status(400).json({ error: 'Launchpad did not pass the account id. Open ProspectIQ from the Launchpad menu.' });
+  const client = getClientByLocation(loc);
+  if (!client) return res.status(404).json({ error: 'not_setup', message: 'This Launchpad account is not set up for ProspectIQ yet.' });
+  res.cookie('piq_client', client.access_key, cookieOpts(req));
   res.json({ ok: true, client: publicClient(client) });
 });
 
@@ -121,6 +134,7 @@ api.post('/ask', requireClient('research:ask'), wrap(async (req, res) => {
   const filters = intentFilters(intent);
   const kind = intent.kind;
   const result = kind === 'people' ? (live ? await searchPeople(apollo, filters, page, pp) : samplePeople(filters, page, pp)) : (live ? await searchCompanies(apollo, filters, page, pp) : sampleCompanies(filters, page, pp));
+  if (kind === 'people') await annotateInLaunchpad(client, result.rows as Person[], live);
   const fits = await fitLines(llm, client.profile, result.rows, intent, kind, useGpt);
   if (live && page === 1) recentAdd(client.slug, { q, kind, total: result.total, t: Date.now() });
   const warnings: string[] = [];
@@ -140,6 +154,7 @@ api.post('/search', requireClient('research:people'), wrap(async (req, res) => {
   const pp = PER_PAGE.includes(Number(req.body?.pp)) ? Number(req.body.pp) : 25;
   if (!filtersActive(filters) && !sample) return res.json({ kind, filters, result: null, sample });
   const result = kind === 'people' ? (live ? await searchPeople(apollo, filters, page, pp) : samplePeople(filters, page, pp)) : (live ? await searchCompanies(apollo, filters, page, pp) : sampleCompanies(filters, page, pp));
+  if (kind === 'people') await annotateInLaunchpad(req.piq!.client, result.rows as Person[], live);
   res.json({ kind, filters, result, sample });
 }));
 
@@ -163,6 +178,7 @@ api.post('/lookup', requireClient('research:lookup'), wrap(async (req, res) => {
     ({ org, people } = sampleLookup(domain));
   }
   for (const p of people) p.role = roleFromTitle(p.title, client.profile.roles);
+  await annotateInLaunchpad(client, people, live);
   const [note, message] = draftNote(client.profile, org, people, imports);
   res.json({ org, people, note, message, imports, sample });
 }));
@@ -176,8 +192,12 @@ api.post('/push/people', requireClient('research:ask'), wrap(async (req, res) =>
   const people = ((req.body?.people || []) as Person[]).filter((p) => picks.has(String(p.id)));
   if (!people.length) return res.status(400).json({ error: 'Tick at least one person.' });
   const roles = (req.body?.roles || {}) as Record<string, string>;
+  const need = people.filter((p) => p.has_email || p.email).length;
+  const blocked = creditCheck(client, need);
+  if (blocked) return res.status(402).json({ error: blocked, credits_left: creditsLeft(client) });
   const r = await pushPeople(client, people, roles, { live, apollo });
-  res.json({ ...r, links: r.results.map((x) => ({ company: lpUrl(client, 'business', x.company.id), opportunity: lpUrl(client, 'opportunity', x.opportunity.id), contacts: x.contacts.map((c) => lpUrl(client, 'contact', c.id)) })), bd: lpUrl(client, 'pipeline') });
+  const credits_left = r.spent ? spendCredits(client, r.spent, 'push from the research tabs') : creditsLeft(client);
+  res.json({ ...r, credits_spent: r.spent, credits_left, links: r.results.map((x) => ({ company: lpUrl(client, 'business', x.company.id), opportunity: lpUrl(client, 'opportunity', x.opportunity.id), contacts: x.contacts.map((c) => lpUrl(client, 'contact', c.id)) })), bd: lpUrl(client, 'pipeline') });
 }));
 
 api.post('/push/companies', requireClient('research:companies'), wrap(async (req, res) => {
@@ -197,6 +217,9 @@ api.post('/push/lookup', requireClient('research:lookup'), wrap(async (req, res)
   if (!org?.name) return res.status(400).json({ error: 'Nothing to push: look a company up first.' });
   const picks = new Set((req.body?.picks || []).map(String));
   const roles = (req.body?.roles || {}) as Record<string, string>;
+  const ticked = ((req.body?.people || []) as Person[]).filter((p) => picks.has(String(p.id)));
+  const blocked = creditCheck(client, ticked.filter((p) => p.has_email || p.email).length);
+  if (blocked) return res.status(402).json({ error: blocked, credits_left: creditsLeft(client) });
   const contacts: Person[] = [];
   const renames: Record<string, string> = {};
   const errors: string[] = [];
@@ -217,7 +240,10 @@ api.post('/push/lookup', requireClient('research:lookup'), wrap(async (req, res)
   const rename = (s: string) => Object.entries(renames).reduce((acc, [a, b]) => acc.split(a).join(b), s);
   const imports = String(req.body?.imports || '');
   const result = await pushProspect(lp, { company: { name: org.name, website: org.website, city: org.city, state: org.state, country: org.country, phone: org.phone, description: (org.description + (imports.trim() ? `\n\nImports (ImportGenius): ${imports.trim()}` : '')).trim(), industry: org.industry, size: sizeBucket(org.employees) }, contacts, note: rename(String(req.body?.note || '')), message: rename(String(req.body?.message || '')) });
-  res.json({ results: [result], errors, links: [{ company: lpUrl(client, 'business', result.company.id), opportunity: lpUrl(client, 'opportunity', result.opportunity.id), contacts: result.contacts.map((c) => lpUrl(client, 'contact', c.id)) }], bd: lpUrl(client, 'pipeline') });
+  markPushed(client.slug, result.contacts.map((c, i) => ({ researchId: contacts[i]?.id || '', lpId: c.id, name: c.name })));
+  const spent = countSpent(result);
+  const credits_left = spent ? spendCredits(client, spent, `push from company lookup (${org.domain || org.name})`) : creditsLeft(client);
+  res.json({ results: [result], errors, credits_spent: spent, credits_left, links: [{ company: lpUrl(client, 'business', result.company.id), opportunity: lpUrl(client, 'opportunity', result.opportunity.id), contacts: result.contacts.map((c) => lpUrl(client, 'contact', c.id)) }], bd: lpUrl(client, 'pipeline') });
 }));
 
 /* ---- finders ---- */
@@ -260,12 +286,25 @@ api.delete('/finders/:id', requireClient('finders'), (req, res) => {
 
 api.get('/usage', requireClient('usage'), wrap(async (req, res) => {
   const { client, live, apollo, sample } = req.piq!;
+  const admin = isAdmin(req);
+  if (!admin && !client.flags.show_usage) return res.status(403).json({ error: 'Usage is not switched on for this account.' });
   const days = [7, 30, 90].includes(Number(req.query.days)) ? Number(req.query.days) : 30;
   const summary = usageCompute(usageRead(client.slug, days), days, client.launchpad.timezone);
   let plan: unknown[] = [];
-  if (live && !sample) { try { plan = await planLimits(apollo); } catch { plan = []; } }
-  res.json({ summary, plan, prices: config.openaiPrices });
+  if (admin && live && !sample) { try { plan = await planLimits(apollo); } catch { plan = []; } }
+  res.json({ summary: admin ? summary : stripCost(summary), plan, show_cost: admin, credits: { total: client.credits.total, used: client.credits.used, left: creditsLeft(client) }, ledger: creditLedger(client.slug, 30) });
 }));
+
+/** What a client may see: counts and tokens, never money. */
+function stripCost(s: UsageSummary): UsageSummary {
+  const out = JSON.parse(JSON.stringify(s)) as UsageSummary;
+  out.totals.cost = 0; out.totals.cost_known = false;
+  for (const d of out.by_day) d.cost = 0;
+  for (const v of Object.values(out.by_ctx)) v.cost = 0;
+  for (const v of Object.values(out.by_model)) { v.cost = 0; v.known = false; }
+  for (const r of out.recent) if ('cost' in r) r.cost = null;
+  return out;
+}
 
 /* ---- admin ---- */
 
@@ -299,10 +338,36 @@ admin.put('/clients/:slug', (req, res) => {
   if (typeof b.enabled === 'boolean') c.enabled = b.enabled;
   if (b.launchpad && typeof b.launchpad === 'object') for (const k of ['location_id', 'token', 'app_url', 'pipeline', 'quote_stage', 'owner', 'timezone'] as const) if (typeof b.launchpad[k] === 'string') c.launchpad[k] = b.launchpad[k].trim();
   if (b.keys && typeof b.keys === 'object') for (const k of ['openai', 'openai_model', 'apollo'] as const) if (typeof b.keys[k] === 'string') c.keys[k] = b.keys[k].trim();
-  if (b.limits && typeof b.limits === 'object' && b.limits.credits_per_month != null) c.limits.credits_per_month = Math.max(0, Number(b.limits.credits_per_month) || 0);
+  if (b.flags && typeof b.flags === 'object' && typeof b.flags.show_usage === 'boolean') c.flags.show_usage = b.flags.show_usage;
   if (b.profile && typeof b.profile === 'object') c.profile = cleanProfile({ ...c.profile, ...b.profile });
   saveClient(c);
   res.json({ client: c, links: menuLinks(c) });
+});
+
+admin.get('/clients/:slug/credits', (req, res) => {
+  const c = getClient(String(req.params.slug));
+  if (!c) return res.status(404).json({ error: 'No such client.' });
+  res.json({ credits: { total: c.credits.total, used: c.credits.used, left: creditsLeft(c) }, ledger: creditLedger(c.slug, 100) });
+});
+
+admin.post('/clients/:slug/credits', (req, res) => {
+  let c = getClient(String(req.params.slug));
+  if (!c) return res.status(404).json({ error: 'No such client.' });
+  const add = Number(req.body?.add);
+  const total = Number(req.body?.total);
+  if (Number.isFinite(add) && add !== 0) c = addCredits(c, add, String(req.body?.reason || (add > 0 ? 'top-up' : 'adjustment')).slice(0, 120));
+  else if (Number.isFinite(total)) c = setCreditsTotal(c, total);
+  else return res.status(400).json({ error: 'Send add (a number of credits) or total.' });
+  res.json({ credits: { total: c.credits.total, used: c.credits.used, left: creditsLeft(c) }, ledger: creditLedger(c.slug, 100) });
+});
+
+admin.get('/link', (_req, res) => {
+  res.json({ url: universalLink(), secret_set: !!agencySettings().link_secret });
+});
+
+admin.post('/link/rotate', (_req, res) => {
+  rotateLinkSecret();
+  res.json({ url: universalLink() });
 });
 
 admin.post('/clients/:slug/rotate-key', (req, res) => {
@@ -349,7 +414,7 @@ api.use('/admin', admin);
 
 function menuLinks(c: Client): { label: string; url: string }[] {
   const base = `${config.publicUrl}/?key=${encodeURIComponent(c.access_key)}`;
-  return [{ label: 'ProspectIQ', url: base }, { label: 'Usage (admins)', url: `${base}&view=usage` }];
+  return [{ label: 'ProspectIQ (this client only)', url: base }, { label: 'ProspectIQ (one link for every sub-account)', url: universalLink() }];
 }
 
 function cleanProfile(p: Partial<Profile>): Profile {

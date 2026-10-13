@@ -7,7 +7,9 @@ import { searchCompanies, searchPeople, type ApolloCtx } from './apollo.js';
 import { sampleCompanies, samplePeople } from './samples.js';
 import { cleanIntent, intentFilters } from './rules.js';
 import { fitLines, type LlmCtx } from './llm.js';
-import { findContactByEmail, lpOf, lpReady } from './launchpad.js';
+import { lpOf, lpReady } from './launchpad.js';
+import { annotateInLaunchpad } from './lpindex.js';
+import { creditsLeft, spendCredits } from './credits.js';
 import { pushCompanies, pushPeople } from './push.js';
 import type { Client, Finder, Org, Person } from './types.js';
 
@@ -117,7 +119,7 @@ export function describe(f: Finder, tz: string): string {
 
 /* ---- one run ---- */
 
-export interface RunResult { ok: boolean; text: string; pushed: { name: string; company: string; id: string; fit: string }[]; credits: number; seen: string[] }
+export interface RunResult { ok: boolean; text: string; pushed: { name: string; company: string; id: string; fit: string }[]; credits: number; spent: number; left: number; skipped: number; seen: string[] }
 
 export async function runFinder(client: Client, f: Finder, live: boolean): Promise<RunResult> {
   const keys = effectiveKeys(client);
@@ -126,36 +128,41 @@ export async function runFinder(client: Client, f: Finder, live: boolean): Promi
   const intent = cleanIntent(f.intent);
   const filters = intentFilters(intent);
   const seen = new Set(f.seen || []);
-  const want = Math.max(1, f.per_run);
-  const lp = lpOf(client);
+  let want = Math.max(1, f.per_run);
+  const left = creditsLeft(client);
+  if (intent.kind === 'people' && live) {
+    if (left <= 0) return { ok: false, text: 'No credits left: the finder did not run. Ask your Launchpad team to top up.', pushed: [], credits: 0, spent: 0, left: 0, skipped: 0, seen: [...seen] };
+    want = Math.min(want, left);
+  }
   const picked: (Person | Org)[] = [];
   let credits = 0;
+  let skipped = 0;
   for (let page = 1; page <= 4 && picked.length < want; page++) {
     const res = intent.kind === 'people' ? (live ? await searchPeople(apollo, filters, page, 25) : samplePeople(filters, page, 25)) : (live ? await searchCompanies(apollo, filters, page, 25) : sampleCompanies(filters, page, 25));
     if (!res.rows.length) break;
+    if (intent.kind === 'people') await annotateInLaunchpad(client, res.rows as Person[], live);
     for (const r of res.rows) {
       if (picked.length >= want) break;
       if (seen.has(r.id)) continue;
       seen.add(r.id);
-      if (intent.kind === 'people' && live && lpReady(lp)) {
-        // de-duplicate against Launchpad by email once looked up (done inside pushPeople via upsert); here skip known emails cheaply when the search already has one
-        const p = r as Person;
-        if (p.email) { try { if (await findContactByEmail(lp, p.email)) continue; } catch { /* keep */ } }
-      }
+      if ((r as Person).in_lp) { skipped++; continue; }
       picked.push(r);
     }
     if (res.rows.length < 25) break;
   }
   const seenOut = [...seen].slice(-2000);
-  if (!picked.length) return { ok: true, text: 'No new leads today: everything the search returned was delivered before.', pushed: [], credits: 0, seen: seenOut };
+  if (!picked.length) return { ok: true, text: skipped ? `No new leads today: everything the search returned is already in Launchpad (${skipped} skipped).` : 'No new leads today: everything the search returned was delivered before.', pushed: [], credits: 0, spent: 0, left, skipped, seen: seenOut };
   const fits = await fitLines(llm, client.profile, picked, intent, intent.kind, live && !!keys.openai);
   const header = `LEADS FINDER — ${f.name} (${new Intl.DateTimeFormat('en-US', { timeZone: client.launchpad.timezone, month: 'short', day: 'numeric', year: 'numeric' }).format(new Date())})`;
   const tags = ['leads-finder', 'leads-finder-new'];
   const pushed: RunResult['pushed'] = [];
   const errors: string[] = [];
+  let spent = 0;
   if (intent.kind === 'people') {
     const r = await pushPeople(client, picked as Person[], {}, { live, apollo, tags, noteHeader: header, fits });
     credits = r.credits;
+    spent = r.spent;
+    if (live && spent) spendCredits(client, spent, `finder: ${f.name}`, 'finder');
     errors.push(...r.errors);
     for (const res of r.results) for (const c of res.contacts) pushed.push({ name: c.name, company: res.company.name, id: c.id, fit: '' });
   } else {
@@ -163,18 +170,19 @@ export async function runFinder(client: Client, f: Finder, live: boolean): Promi
     errors.push(...r.errors);
     for (const c of r.results) pushed.push({ name: c.name, company: c.domain, id: c.id, fit: fits[c.name] || '' });
   }
-  if (!live) return { ok: true, text: `Sample run: ${picked.length} leads would be pushed (nothing written in sample mode).`, pushed: picked.map((r) => ({ name: 'first' in r ? `${r.first} ${r.last}`.trim() : r.name, company: 'first' in r ? r.company : r.domain, id: '', fit: fits[r.id] || '' })), credits: 0, seen: seenOut };
+  if (!live) return { ok: true, text: `Sample run: ${picked.length} leads would be pushed (nothing written in sample mode).`, pushed: picked.map((r) => ({ name: 'first' in r ? `${r.first} ${r.last}`.trim() : r.name, company: 'first' in r ? r.company : r.domain, id: '', fit: fits[r.id] || '' })), credits: 0, spent: 0, left, skipped, seen: seenOut };
   const ok = errors.length === 0;
-  const text = ok ? `${pushed.length} new lead${pushed.length === 1 ? '' : 's'} pushed into Launchpad${credits ? `, ${credits} lookup credit${credits === 1 ? '' : 's'}` : ''}.` : errors.join(' ');
-  return { ok, text, pushed, credits, seen: seenOut };
+  const nowLeft = creditsLeft(client);
+  const text = ok ? `${pushed.length} new lead${pushed.length === 1 ? '' : 's'} pushed into Launchpad${skipped ? `, ${skipped} already there skipped` : ''}${spent ? `, ${spent} credit${spent === 1 ? '' : 's'} used (${nowLeft} left)` : ''}.` : errors.join(' ');
+  return { ok, text, pushed, credits, spent, left: nowLeft, skipped, seen: seenOut };
 }
 
 export async function runAndSave(client: Client, id: string, live: boolean): Promise<RunResult> {
   const all = listFinders(client.slug);
   const i = all.findIndex((f) => f.id === id);
-  if (i < 0) return { ok: false, text: 'Finder not found.', pushed: [], credits: 0, seen: [] };
+  if (i < 0) return { ok: false, text: 'Finder not found.', pushed: [], credits: 0, spent: 0, left: 0, skipped: 0, seen: [] };
   const r = await runFinder(client, all[i], live);
-  if (live) {
+  if (live && (r.ok || r.pushed.length)) {
     all[i].last_run = Date.now();
     all[i].last_result = r.text;
     all[i].seen = r.seen;

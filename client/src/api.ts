@@ -107,6 +107,9 @@ export const cap = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 /** The People tab, limited to one company's buyers. */
 export const peopleAtHref = (domain: string) => `/people?domains=${encodeURIComponent(domain)}&sen=${encodeURIComponent('owner|c_suite|vp|head|director|manager')}`;
 
+/** The contact's page inside Launchpad (for "already a contact"). */
+export const lpContactHref = (c: { launchpad_app: string; location_id: string }, id: string) => (c.launchpad_app && c.location_id && id ? `${c.launchpad_app.replace(/\/$/, '')}/v2/location/${encodeURIComponent(c.location_id)}/contacts/detail/${encodeURIComponent(id)}` : '');
+
 export const ctxLabel = (c: string): string => {
   const map: Record<string, string> = { 'research:ask': 'Ask', 'research:people': 'People', 'research:companies': 'Companies', 'research:industries': 'Industries', 'research:lookup': 'Company lookup', usage: 'Usage page', 'admin:draft': 'Admin · profile draft', me: 'Sign-in' };
   if (map[c]) return map[c];

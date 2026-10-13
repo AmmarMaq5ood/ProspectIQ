@@ -1,13 +1,15 @@
 import { enrichPerson, orgShape, type ApolloCtx } from './apollo.js';
 import { draftNote, lpOf, lpReady, pushCompany, pushProspect, roleFromTitle, sizeBucket } from './launchpad.js';
 import { sampleEnrich } from './samples.js';
+import { markPushed } from './lpindex.js';
 import type { Client, Org, Person, PushResult } from './types.js';
 
 /** Push flows shared by the Ask tab, the People/Companies tabs and the finders. */
 
 export interface PushPeopleOpts { live: boolean; apollo: ApolloCtx; tags?: string[]; noteHeader?: string; fits?: Record<string, string> }
 
-export async function pushPeople(client: Client, people: Person[], roles: Record<string, string>, opts: PushPeopleOpts): Promise<{ results: PushResult[]; errors: string[]; credits: number }> {
+/** `credits` = research lookups that revealed an email; `spent` = leads that became new Launchpad contacts with an email (what the client's pool is charged). */
+export async function pushPeople(client: Client, people: Person[], roles: Record<string, string>, opts: PushPeopleOpts): Promise<{ results: PushResult[]; errors: string[]; credits: number; spent: number }> {
   const errors: string[] = [];
   const groups = new Map<string, { org: Org; contacts: Person[] }>();
   let credits = 0;
@@ -31,13 +33,14 @@ export async function pushPeople(client: Client, people: Person[], roles: Record
     groups.set(key, g);
   }
   const results: PushResult[] = [];
-  if (!groups.size) return { results, errors: errors.length ? errors : ['None of the ticked people could be looked up.'], credits };
+  if (!groups.size) return { results, errors: errors.length ? errors : ['None of the ticked people could be looked up.'], credits, spent: 0 };
   if (!opts.live) {
     for (const g of groups.values()) results.push({ company: { name: g.org.name, id: '' }, contacts: g.contacts.map((c) => ({ name: `${c.first} ${c.last}`.trim(), role: c.role || '', id: '', new: true, email: c.email })), note_added: true, opportunity: { id: '', name: `${g.org.name} — outreach`, created: true }, log: ['sample mode: nothing written'] });
-    return { results, errors, credits: 0 };
+    return { results, errors, credits: 0, spent: 0 };
   }
   const lp = lpOf(client);
-  if (!lpReady(lp)) return { results, errors: ['Launchpad is not connected for this client.'], credits };
+  if (!lpReady(lp)) return { results, errors: ['Launchpad is not connected for this client.'], credits, spent: 0 };
+  let spent = 0;
   for (const g of groups.values()) {
     let [note, message] = draftNote(client.profile, g.org, g.contacts);
     if (opts.noteHeader) {
@@ -45,12 +48,20 @@ export async function pushPeople(client: Client, people: Person[], roles: Record
       note = lines.join('\n') + '\n\n' + note;
     }
     try {
-      results.push(await pushProspect(lp, { company: { name: g.org.name, website: g.org.website, city: g.org.city, state: g.org.state, country: g.org.country, phone: g.org.phone, description: g.org.description, industry: g.org.industry, size: sizeBucket(g.org.employees) }, contacts: g.contacts, note, message }));
+      const r = await pushProspect(lp, { company: { name: g.org.name, website: g.org.website, city: g.org.city, state: g.org.state, country: g.org.country, phone: g.org.phone, description: g.org.description, industry: g.org.industry, size: sizeBucket(g.org.employees) }, contacts: g.contacts, note, message });
+      results.push(r);
+      spent += countSpent(r);
+      markPushed(client.slug, r.contacts.map((c, i) => ({ researchId: g.contacts[i]?.id || '', lpId: c.id, name: c.name })));
     } catch (e) {
       errors.push(`Launchpad, ${g.org.name}: ${(e as Error).message}`);
     }
   }
-  return { results, errors, credits };
+  return { results, errors, credits, spent };
+}
+
+/** A credit per contact that was created in Launchpad with a work email. Updates of existing contacts are free. */
+export function countSpent(r: PushResult): number {
+  return r.contacts.filter((c) => c.id && c.new && c.email).length;
 }
 
 export async function pushCompanies(client: Client, companies: Org[], live: boolean, fits: Record<string, string> = {}, header = ''): Promise<{ results: { name: string; id: string; domain: string }[]; errors: string[] }> {

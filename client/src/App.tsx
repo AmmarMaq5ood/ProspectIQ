@@ -1,8 +1,10 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { Link, Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
-import { api, errText, setSample } from './api';
+import { ApiError, api, errText, setSample } from './api';
 import type { Me, Options } from './types';
-import { BusyProvider } from './components/Busy';
+import { BusyProvider, useBusy } from './components/Busy';
+import { CreditsRing, TopProgress } from './components/Motion';
+import NotSetUp from './pages/NotSetUp';
 import { Icon } from './components/Icon';
 import Login from './pages/Login';
 import Ask from './pages/Ask';
@@ -27,6 +29,7 @@ export default function App() {
   const [me, setMe] = useState<Me | null>(null);
   const [options, setOptions] = useState<Options | null>(null);
   const [boot, setBoot] = useState('');
+  const [notSetup, setNotSetup] = useState(false);
   const loc = useLocation();
   const nav = useNavigate();
   const reload = async () => { setMe(await api<Me>('/me')); };
@@ -37,7 +40,13 @@ export default function App() {
       const key = p.get('key');
       const view = p.get('view');
       if (p.get('sample') === '1') setSample(true);
+      const locId = p.get('loc');
+      const k = p.get('k');
       if (key) { try { await api('/auth/key', { body: { key } }); } catch (e) { setBoot(errText(e)); } }
+      else if (locId && k) {
+        try { await api('/auth/location', { body: { loc: locId, k } }); }
+        catch (e) { if (e instanceof ApiError && e.status === 404) setNotSetup(true); else setBoot(errText(e)); }
+      }
       try {
         const [m, o] = await Promise.all([api<Me>('/me'), api<Options>('/options')]);
         setMe(m);
@@ -46,15 +55,18 @@ export default function App() {
         setBoot(errText(e));
         return;
       }
-      if (key || view) {
+      if (key || view || locId) {
         p.delete('key');
         p.delete('view');
+        p.delete('loc');
+        p.delete('k');
         nav({ pathname: view === 'usage' ? '/usage' : view === 'finders' ? '/finders' : loc.pathname, search: p.toString() ? `?${p}` : '' }, { replace: true });
       }
     })();
   }, []);
 
   if (boot) return <div className="boot"><div className="err" role="alert"><p>{boot}</p></div></div>;
+  if (notSetup && !me?.client) return <NotSetUp />;
   if (!me || !options) return <div className="boot"><span className="spin dark" /> Loading ProspectIQ…</div>;
 
   return (
@@ -88,21 +100,23 @@ const on = ({ isActive }: { isActive: boolean }) => (isActive ? 'on' : '');
 function Shell() {
   const { me, reload } = useApp();
   const nav = useNavigate();
+  const loc = useLocation();
+  const busy = useBusy();
   const c = me.client!;
   const signOut = async () => { await api('/auth/logout', { body: {} }); await reload(); nav('/login'); };
   return (
     <>
+      <TopProgress active={busy.active} />
       <header className="top">
         <div className="ttl">
           <h1>ProspectIQ{me.sample && <span className="badge">Sample data</span>}</h1>
           <p className="sub">{c.name} · Find the buyers and companies you want in plain words, then push them into Launchpad.</p>
         </div>
-        {me.admin && (
-          <div className="ctrls">
-            <Link className="btn secondary sm" to="/admin"><Icon name="settings" />Admin</Link>
-            <button className="btn ghost sm" type="button" onClick={signOut}>Sign out</button>
-          </div>
-        )}
+        <div className="ctrls">
+          <CreditsRing total={c.credits.total} used={c.credits.used} left={c.credits.left} />
+          {me.admin && <Link className="btn secondary sm" to="/admin"><Icon name="settings" />Admin</Link>}
+          {me.admin && <button className="btn ghost sm" type="button" onClick={signOut}>Sign out</button>}
+        </div>
       </header>
       <nav className="tabs" aria-label="Search by">
         <NavLink to="/" end className={on}><Icon name="spark" />Ask</NavLink>
@@ -111,9 +125,9 @@ function Shell() {
         <NavLink to="/industries" className={on}><Icon name="chart" />Industries</NavLink>
         <NavLink to="/lookup" className={on}><Icon name="link" />Company lookup</NavLink>
         <NavLink to="/finders" className={on}><Icon name="calendar" />Daily finders</NavLink>
-        <NavLink to="/usage" className={on}><Icon name="clock" />Usage</NavLink>
+        {(c.show_usage || me.admin) && <NavLink to="/usage" className={on}><Icon name="clock" />Usage</NavLink>}
       </nav>
-      <Outlet />
+      <div className="page" key={loc.pathname}><Outlet /></div>
     </>
   );
 }
@@ -122,9 +136,12 @@ function Shell() {
 function AdminShell() {
   const { me, reload } = useApp();
   const nav = useNavigate();
+  const loc = useLocation();
+  const busy = useBusy();
   const signOut = async () => { await api('/auth/logout', { body: {} }); await reload(); nav('/login'); };
   return (
     <>
+      <TopProgress active={busy.active} />
       <header className="top">
         <div className="ttl">
           <h1>ProspectIQ <span className="badge">Agency admin</span></h1>
@@ -138,7 +155,7 @@ function AdminShell() {
       <nav className="tabs" aria-label="Admin">
         <NavLink to="/admin" end className={on}><Icon name="people" />Clients</NavLink>
       </nav>
-      <Outlet />
+      <div className="page" key={loc.pathname}><Outlet /></div>
     </>
   );
 }

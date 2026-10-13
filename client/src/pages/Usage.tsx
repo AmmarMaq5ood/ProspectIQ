@@ -3,9 +3,10 @@ import { api, ctxLabel, errText, fmtN, fmtWhen, nf, usd } from '../api';
 import { useApp } from '../App';
 import { Icon } from '../components/Icon';
 import { Errors } from '../components/ui';
-import type { PlanRow, UsageSummary } from '../types';
+import { CreditsRing, Num } from '../components/Motion';
+import type { CreditEntry, Credits, PlanRow, UsageSummary } from '../types';
 
-interface UsageRes { summary: UsageSummary; plan?: PlanRow[]; prices?: Record<string, [number, number]> }
+interface UsageRes { summary: UsageSummary; plan?: PlanRow[]; prices?: Record<string, [number, number]>; show_cost?: boolean; credits?: Credits; ledger?: CreditEntry[] }
 
 /** Research-database and GPT consumption. Client view at /usage; the admin sees any client's with adminSlug. */
 export default function Usage({ adminSlug, timezone }: { adminSlug?: string; timezone?: string } = {}) {
@@ -26,6 +27,8 @@ export default function Usage({ adminSlug, timezone }: { adminSlug?: string; tim
   const s = data.summary;
   const t = s.totals;
   const plan = data.plan || [];
+  const showCost = data.show_cost !== false;
+  const credits = data.credits;
 
   return (
     <>
@@ -49,13 +52,35 @@ export default function Usage({ adminSlug, timezone }: { adminSlug?: string; tim
       )}
 
       <section className="kpis" aria-label="Totals">
-        <div className="kpi hero"><div className="l">Research searches</div><div className="v">{nf(t.searches)}</div><div className="n">{nf(t.results)} results returned · free</div></div>
-        <div className="kpi"><div className="l">Lookups</div><div className="v">{nf(t.lookups)}</div><div className="n">person and company lookups</div></div>
-        <div className="kpi"><div className="l">Lookup credits spent</div><div className="v">{nf(t.credits)}</div><div className="n">one per revealed work email</div></div>
-        <div className="kpi"><div className="l">GPT calls</div><div className="v">{nf(t.gpt_calls)}</div><div className="n">requests read and fit lines written</div></div>
-        <div className="kpi"><div className="l">GPT tokens</div><div className="v">{fmtN(t.tokens_in + t.tokens_out)}</div><div className="n">{fmtN(t.tokens_in)} in · {fmtN(t.tokens_out)} out</div></div>
-        <div className="kpi"><div className="l">GPT cost</div><div className="v">{t.gpt_calls ? usd(t.cost) : '—'}</div><div className="n">{t.cost_known ? 'from the model prices on the server' : 'some models have no price set'}{t.apollo_errors + t.gpt_errors > 0 && <> · <span className="od">{nf(t.apollo_errors + t.gpt_errors)} failed calls</span></>}</div></div>
+        <div className="kpi hero"><div className="l">Research searches</div><div className="v"><Num value={t.searches} /></div><div className="n">{nf(t.results)} results returned · free</div></div>
+        <div className="kpi"><div className="l">Lookups</div><div className="v"><Num value={t.lookups} /></div><div className="n">person and company lookups</div></div>
+        <div className="kpi"><div className="l">{showCost ? 'Lookup credits spent' : 'Leads added with email'}</div><div className="v"><Num value={showCost ? t.credits : (credits?.used ?? t.credits)} /></div><div className="n">{showCost ? 'one per revealed work email' : 'one credit each'}</div></div>
+        <div className="kpi"><div className="l">GPT calls</div><div className="v"><Num value={t.gpt_calls} /></div><div className="n">requests read and fit lines written</div></div>
+        <div className="kpi"><div className="l">GPT tokens</div><div className="v"><Num value={t.tokens_in + t.tokens_out} format={fmtN} /></div><div className="n">{fmtN(t.tokens_in)} in · {fmtN(t.tokens_out)} out</div></div>
+        {showCost
+          ? <div className="kpi"><div className="l">GPT cost</div><div className="v">{t.gpt_calls ? usd(t.cost) : '—'}</div><div className="n">{t.cost_known ? 'from the model prices on the server' : 'some models have no price set'}{t.apollo_errors + t.gpt_errors > 0 && <> · <span className="od">{nf(t.apollo_errors + t.gpt_errors)} failed calls</span></>}</div></div>
+          : <div className="kpi"><div className="l">Credits left</div><div className="v"><Num value={credits?.left ?? 0} /></div><div className="n">{nf(credits?.used ?? 0)} used of {nf(credits?.total ?? 0)}</div></div>}
       </section>
+
+      {!showCost && credits && (
+        <section className="grid one" aria-label="Credits">
+          <div className="card">
+            <h2>Credits</h2>
+            <p className="sub">Searching is free. One credit is used for each lead added to Launchpad as a new contact with a work email.</p>
+            <div className="credits-card">
+              <CreditsRing big total={credits.total} used={credits.used} left={credits.left} />
+              {data.ledger && data.ledger.length > 0 && (
+                <div className="scroll" style={{ flex: 1, minWidth: 280 }}>
+                  <table className="ledger" style={{ minWidth: 0 }}>
+                    <thead><tr><th scope="col">When</th><th scope="col" className="num">Change</th><th scope="col">What</th><th scope="col" className="num">Left</th></tr></thead>
+                    <tbody>{data.ledger.slice(0, 8).map((e, i) => <tr key={i}><td>{fmtWhen(e.t, tz)}</td><td className={`num ${e.delta < 0 ? 'neg' : 'pos'}`}>{e.delta > 0 ? '+' : ''}{nf(e.delta)}</td><td>{e.reason}</td><td className="num">{nf(e.left)}</td></tr>)}</tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
 
       <section className="grid two" aria-label="By day">
         <div className="card">
@@ -76,21 +101,21 @@ export default function Usage({ adminSlug, timezone }: { adminSlug?: string; tim
           <p className="sub">Where the calls came from.</p>
           {Object.keys(s.by_ctx).length ? (
             <table>
-              <thead><tr><th scope="col">Feature</th><th scope="col" className="num">Searches</th><th scope="col" className="num">Lookups</th><th scope="col" className="num">Credits</th><th scope="col" className="num">GPT calls</th><th scope="col" className="num">Tokens</th><th scope="col" className="num">GPT cost</th></tr></thead>
+              <thead><tr><th scope="col">Feature</th><th scope="col" className="num">Searches</th><th scope="col" className="num">Lookups</th><th scope="col" className="num">Credits</th><th scope="col" className="num">GPT calls</th><th scope="col" className="num">Tokens</th>{showCost && <th scope="col" className="num">GPT cost</th>}</tr></thead>
               <tbody>
-                {Object.entries(s.by_ctx).map(([k, v]) => <tr key={k}><td>{ctxLabel(k)}</td><td className="num">{nf(v.searches)}</td><td className="num">{nf(v.lookups)}</td><td className="num">{nf(v.credits)}</td><td className="num">{nf(v.gpt_calls)}</td><td className="num">{fmtN(v.tokens)}</td><td className="num">{v.gpt_calls ? usd(v.cost) : '—'}</td></tr>)}
+                {Object.entries(s.by_ctx).map(([k, v]) => <tr key={k}><td>{ctxLabel(k)}</td><td className="num">{nf(v.searches)}</td><td className="num">{nf(v.lookups)}</td><td className="num">{nf(v.credits)}</td><td className="num">{nf(v.gpt_calls)}</td><td className="num">{fmtN(v.tokens)}</td>{showCost && <td className="num">{v.gpt_calls ? usd(v.cost) : '—'}</td>}</tr>)}
               </tbody>
             </table>
           ) : <p className="empty">Nothing logged in this period.</p>}
         </div>
         <div className="card">
           <h2>GPT by model</h2>
-          <p className="sub">Prices per million tokens are set on the server.</p>
+          <p className="sub">{showCost ? 'Prices per million tokens are set on the server.' : 'Requests read and fit lines written, by model.'}</p>
           {Object.keys(s.by_model).length ? (
             <table>
-              <thead><tr><th scope="col">Model</th><th scope="col" className="num">Calls</th><th scope="col" className="num">Tokens in</th><th scope="col" className="num">Tokens out</th><th scope="col" className="num">Cost</th></tr></thead>
+              <thead><tr><th scope="col">Model</th><th scope="col" className="num">Calls</th><th scope="col" className="num">Tokens in</th><th scope="col" className="num">Tokens out</th>{showCost && <th scope="col" className="num">Cost</th>}</tr></thead>
               <tbody>
-                {Object.entries(s.by_model).map(([m, v]) => <tr key={m}><td>{m}</td><td className="num">{nf(v.calls)}</td><td className="num">{nf(v.in)}</td><td className="num">{nf(v.out)}</td><td className="num">{v.known ? usd(v.cost) : <span className="status">no price set</span>}</td></tr>)}
+                {Object.entries(s.by_model).map(([m, v]) => <tr key={m}><td>{m}</td><td className="num">{nf(v.calls)}</td><td className="num">{nf(v.in)}</td><td className="num">{nf(v.out)}</td>{showCost && <td className="num">{v.known ? usd(v.cost) : <span className="status">no price set</span>}</td>}</tr>)}
               </tbody>
             </table>
           ) : <p className="empty">No GPT calls in this period.</p>}
@@ -100,7 +125,7 @@ export default function Usage({ adminSlug, timezone }: { adminSlug?: string; tim
       </section>
 
       <section className="grid two" aria-label="Plan limits and recent calls">
-        {!adminSlug && (
+        {!adminSlug && showCost && (
           <div className="card">
             <h2>Research plan limits today</h2>
             <p className="sub">Straight from the research service: calls allowed and used per day, hour and minute for the endpoints this app uses.</p>
@@ -139,7 +164,8 @@ export default function Usage({ adminSlug, timezone }: { adminSlug?: string; tim
           ) : <p className="empty">Nothing logged yet. Calls are recorded from the moment the app is installed.</p>}
         </div>
       </section>
-      {!adminSlug && <p className="foot">Searches are free; a credit is logged on a person lookup that returns a work email. GPT cost is tokens × the per-million prices set on the server. The research service's own limits are read live and cached for five minutes.</p>}
+      {!adminSlug && showCost && <p className="foot">Searches are free; a credit is logged on a person lookup that returns a work email. GPT cost is tokens × the per-million prices set on the server. The research service's own limits are read live and cached for five minutes.</p>}
+      {!adminSlug && !showCost && <p className="foot">Searches are free. One credit is used for each lead added to Launchpad as a new contact with a work email; leads already in Launchpad are skipped and cost nothing.</p>}
     </>
   );
 }

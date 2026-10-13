@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { nf, peopleAtHref } from '../api';
-import type { CompaniesPushed, PeoplePushed, SearchResult } from '../types';
+import { lpContactHref, nf, peopleAtHref } from '../api';
+import { useApp } from '../App';
+import type { CompaniesPushed, PeoplePushed, Person, SearchResult } from '../types';
 import { Icon } from './Icon';
 
 /* ---- small shared pieces ---- */
@@ -83,6 +84,26 @@ export function Range({ label, min, max, phMin, phMax, onMin, onMax }: { label: 
   );
 }
 
+/** "already a contact", linking to the record in Launchpad. */
+export function InLp({ p }: { p: Person }) {
+  const { me } = useApp();
+  if (!p.in_lp) return null;
+  const href = me.client ? lpContactHref(me.client, p.in_lp.id) : '';
+  const label = 'already a contact';
+  return href ? <a className="pill inlp" href={href} target="_blank" rel="noopener" title={`In Launchpad as ${p.in_lp.name}`} onClick={(e) => e.stopPropagation()}>{label}</a> : <span className="pill inlp" title={`In Launchpad as ${p.in_lp.name}`}>{label}</span>;
+}
+
+/** The row under results: hide what is already in Launchpad. */
+export function LpFilter({ n, hide, onChange }: { n: number; hide: boolean; onChange: (v: boolean) => void }) {
+  if (!n) return null;
+  return (
+    <button type="button" role="switch" aria-checked={hide} className="toggle-row" onClick={() => onChange(!hide)}>
+      <span className={`switch${hide ? ' on' : ''}`} />
+      <span>Hide the {n} already in Launchpad</span>
+    </button>
+  );
+}
+
 /* ---- "Pushed to Launchpad" ---- */
 
 export function PushedPeople({ data }: { data: PeoplePushed }) {
@@ -109,6 +130,7 @@ export function PushedPeople({ data }: { data: PeoplePushed }) {
         })}
       </ul>
       {data.errors.length > 0 && data.errors.map((e, i) => <p key={i}>{e}</p>)}
+      {typeof data.credits_left === 'number' && <p>{data.credits_spent ? `${data.credits_spent} credit${data.credits_spent === 1 ? '' : 's'} used` : 'No credits used'} · {nf(data.credits_left)} left.</p>}
       <p>{data.bd ? <>Next: <a href={data.bd} target="_blank" rel="noopener">open the pipeline in Launchpad</a>, or keep searching.</> : 'Keep searching, or open the pipeline in Launchpad.'}</p>
     </Notice>
   );

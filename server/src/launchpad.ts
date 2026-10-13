@@ -72,6 +72,27 @@ export async function findContactByName(lp: LP, first: string, last: string, com
   return hit ? String(hit.id) : '';
 }
 
+export interface LpContact { id: string; first: string; last: string; company: string; email: string }
+
+function shapeContact(c: Record<string, any>): LpContact {
+  return { id: String(c.id || ''), first: String(c.firstName || ''), last: String(c.lastName || ''), company: String(c.companyName || ''), email: String(c.email || '').toLowerCase() };
+}
+
+/** Contacts matching the given search filters (paged, capped). */
+export async function searchContacts(lp: LP, filters: Record<string, unknown>[], max = 500): Promise<LpContact[]> {
+  const out: LpContact[] = [];
+  for (let page = 1; page <= 20 && out.length < max; page++) {
+    const r = await req(lp, 'POST', '/contacts/search', { locationId: lp.locationId, pageLimit: 100, page, filters });
+    const rows = (r.contacts || []).map(shapeContact);
+    out.push(...rows);
+    if (rows.length < 100) break;
+  }
+  return out.slice(0, max);
+}
+
+export const contactsWithTag = (lp: LP, tag: string) => searchContacts(lp, [{ field: 'tags', operator: 'contains', value: tag }], 3000);
+export const contactsAtCompany = (lp: LP, company: string) => searchContacts(lp, [{ field: 'companyName', operator: 'eq', value: company }], 100);
+
 export async function pushCompany(lp: LP, co: { name: string; website?: string; city?: string; state?: string; country?: string; phone?: string; description?: string }): Promise<string> {
   try {
     const list = await req(lp, 'GET', '/businesses/', undefined, { locationId: lp.locationId });

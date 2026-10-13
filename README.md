@@ -130,6 +130,12 @@ The server keeps its own `.env` and data folder; the deploy resets only tracked 
 
 The site is https (the sign-in cookie is `SameSite=None; Secure`, which Launchpad's iframe needs). Finders run inside the pm2 process; no cron. `pm2 logs prospectiq` shows the finder runs and API errors.
 
+## Credits, the one menu link, and duplicates
+
+- **Credits.** Each client has a one-time pool (1,000 by default). Searching is free; one credit is used for each lead that lands in Launchpad as a *new* contact with a work email. Updating an existing contact costs nothing. At zero, pushes and finders stop with a clear message until the agency tops up in *Admin → client → Credits & visibility*, where every spend and top-up is listed. Clients see their credits left in the header; cost is only ever shown in the admin panel. The client's Usage tab is off unless switched on there.
+- **One menu link for every sub-account.** The admin Clients page shows `…/?loc={{location.id}}&k=<secret>`. Added once at agency level in Launchpad, it opens each sub-account's own ProspectIQ (matched by the location id saved on the Launchpad connection tab). Sub-accounts not set up yet see a "not switched on" page. Per-client `?key=` links still work. Rotate the secret from the same card if it ever leaks.
+- **Already in Launchpad.** Search results are checked against what this app pushed (`pushed.json`), every contact tagged `research`, and the contacts at the same company (by name, even with a masked surname). Those rows get an "already a contact" tag and a switch to hide them; finders skip them automatically.
+
 ## How a client uses it
 
 - **Ask**: type a request; the "Understood as" chips show how it was read; tick leads; *Push to Launchpad*. *Refine with all filters* opens the same search on the People or Companies tab.

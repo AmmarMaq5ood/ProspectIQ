@@ -70,6 +70,8 @@ export interface Person {
   role?: string;
   tags?: string[];
   org?: Org;
+  /** Set when this person is already a Launchpad contact (pushed before, or found by name + company). */
+  in_lp?: { id: string; name: string };
 }
 
 export interface Org {
@@ -138,11 +140,13 @@ export interface Client {
     openai_model: string;
     apollo: string;
   };
-  limits: {
-    credits_per_month: number;
-  };
+  /** One-time credit pool: one credit per lead added to Launchpad with a work email. Topped up in the admin panel. */
+  credits: { total: number; used: number };
+  flags: { show_usage: boolean };
   profile: Profile;
 }
+
+export interface CreditEntry { t: number; delta: number; reason: string; by: string; left: number }
 
 export interface Finder {
   id: string;

@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, errText, fmtWhen } from '../api';
 import { Icon } from '../components/Icon';
+import { Notice } from '../components/ui';
 import { Errors } from '../components/ui';
 import type { ClientRow } from '../types';
 
@@ -13,9 +14,12 @@ export default function Admin() {
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
   const [slugTouched, setSlugTouched] = useState(false);
+  const [link, setLink] = useState('');
+  const [copied, setCopied] = useState(false);
+  const loadLink = () => api<{ url: string }>('/admin/link').then((r) => setLink(r.url)).catch(() => {});
 
   const load = () => api<{ clients: ClientRow[] }>('/admin/clients').then((r) => setRows(r.clients)).catch((e) => setErr(errText(e)));
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); loadLink(); }, []);
 
   const auto = (n: string) => n.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
   const create = async (e: FormEvent) => {
@@ -32,6 +36,22 @@ export default function Admin() {
   return (
     <>
       <Errors errors={err ? [err] : []} />
+      <section className="card" style={{ marginBottom: 12 }}>
+        <h2>One menu link for every sub-account</h2>
+        <p className="sub">Add this once at agency level in Launchpad (Settings → Custom menu links, open inside the app). Launchpad fills in the account id when a user opens it, and ProspectIQ shows that account's own setup. Accounts not set up here see a "not switched on yet" page.</p>
+        {link ? (
+          <>
+            <dl className="kv">
+              <dt>Menu link</dt>
+              <dd><span className="copyable"><code>{link}</code><button className="btn secondary sm" type="button" onClick={async () => { try { await navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* blocked */ } }}><Icon name="copy" />{copied ? 'Copied' : 'Copy'}</button></span></dd>
+            </dl>
+            <div className="savebar">
+              <span className="hint">Rotating the secret invalidates the old link everywhere; paste the new one into Launchpad afterwards.</span>
+              <button className="btn ghost sm" type="button" onClick={async () => { if (!confirm('Rotate the link secret? The current menu link stops working until you replace it in Launchpad.')) return; try { const r = await api<{ url: string }>('/admin/link/rotate', { body: {} }); setLink(r.url); } catch (e) { setErr(errText(e)); } }}><Icon name="key" />Rotate secret</button>
+            </div>
+          </>
+        ) : <Notice kind="err"><p>The link could not be loaded.</p></Notice>}
+      </section>
       <section className="card" style={{ marginBottom: 12 }}>
         <h2>New client</h2>
         <p className="sub">Give it a name; the short id becomes its folder on disk and its part of the menu link. You fill in Launchpad, the profile and the keys next.</p>

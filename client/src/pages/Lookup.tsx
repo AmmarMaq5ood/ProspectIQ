@@ -4,7 +4,7 @@ import { useApp } from '../App';
 import { useBusy } from '../components/Busy';
 import { Chips } from '../components/Chips';
 import { Icon } from '../components/Icon';
-import { Checks, Errors, LpLink, Notice } from '../components/ui';
+import { Checks, Errors, InLp, LpLink, Notice } from '../components/ui';
 import { sizeBucket } from './Research';
 import type { Org, PeoplePushed, Person } from '../types';
 
@@ -14,7 +14,7 @@ const SIX = ['owner', 'c_suite', 'vp', 'head', 'director', 'manager'];
 
 /** One domain in: the company, its buyers, a drafted note and message; tick and push. */
 export default function Lookup() {
-  const { me, options } = useApp();
+  const { me, options, reload } = useApp();
   const c = me.client!;
   const busy = useBusy();
   const [domain, setDomain] = useState('');
@@ -37,7 +37,7 @@ export default function Lookup() {
     try {
       const x = await busy.run('Looking the company up… hang tight', () => api<LookupRes>('/lookup', { body: { domain, pp, sen, titles, imports } }));
       setR(x); setNote(x.note); setMessage(x.message); setRoles({});
-      setPicks(new Set(x.people.slice(0, 5).map((p) => p.id)));
+      setPicks(new Set(x.people.filter((p) => !p.in_lp).slice(0, 5).map((p) => p.id)));
     } catch (x) {
       setErr(errText(x)); setR(null);
     }
@@ -46,6 +46,8 @@ export default function Lookup() {
   const withEmail = (p: Person) => !!p.has_email || !!p.email;
   const nSel = r ? r.people.filter((p) => picks.has(p.id)).length : 0;
   const nEmail = r ? r.people.filter((p) => picks.has(p.id) && withEmail(p)).length : 0;
+  const left = c.credits.left;
+  const blocked = left <= 0 || nEmail > left;
   const pick = (m: 'all' | 'none' | 'email') => r && setPicks(new Set(r.people.filter((p) => m === 'all' || (m === 'email' && withEmail(p))).map((p) => p.id)));
 
   const push = async () => {
@@ -54,6 +56,7 @@ export default function Lookup() {
     try {
       const x = await busy.run('Pushing to Launchpad… looking each person up, then creating the records', () => api<PeoplePushed>('/push/lookup', { body: { org: r.org, people: r.people, picks: [...picks], roles, note, message, imports } }));
       setPushed(x);
+      await reload();
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (x) {
       setErr(errText(x));
@@ -78,6 +81,7 @@ export default function Lookup() {
             })}
           </ul>
           {pushed.errors.map((e, i) => <p key={i}>{e}</p>)}
+          {typeof pushed.credits_left === 'number' && <p>{pushed.credits_spent ? `${pushed.credits_spent} credit${pushed.credits_spent === 1 ? '' : 's'} used` : 'No credits used'} · {nf(pushed.credits_left)} left.</p>}
           <p>Next: {pushed.bd ? <a href={pushed.bd} target="_blank" rel="noopener">open the pipeline in Launchpad</a> : 'open the pipeline in Launchpad'}, or look up the next company.</p>
         </Notice>
       )}
@@ -143,9 +147,9 @@ export default function Lookup() {
                       <thead><tr><th scope="col"></th><th scope="col">Name</th><th scope="col">Title</th><th scope="col">Role</th><th scope="col">Email on file</th><th scope="col">LinkedIn</th></tr></thead>
                       <tbody>
                         {r.people.map((p) => (
-                          <tr key={p.id}>
+                          <tr key={p.id} className={p.in_lp ? 'dim' : ''}>
                             <td><input type="checkbox" checked={picks.has(p.id)} onChange={(e) => setPicks((s) => { const n = new Set(s); if (e.target.checked) n.add(p.id); else n.delete(p.id); return n; })} aria-label={`Push ${fullName(p)}`} /></td>
-                            <td><span className="nm">{fullName(p)}</span>{p.city && <span className="st">{p.city}</span>}</td>
+                            <td><span className="nm">{fullName(p)} <InLp p={p} /></span>{p.city && <span className="st">{p.city}</span>}</td>
                             <td>{p.title}</td>
                             <td><select aria-label="Role" value={roles[p.id] || p.role || c.profile.roles[c.profile.roles.length - 1]} onChange={(e) => setRoles((m) => ({ ...m, [p.id]: e.target.value }))}>{c.profile.roles.map((x) => <option key={x}>{x}</option>)}</select></td>
                             <td>{p.email ? p.email : p.has_email ? <span className="pill good">yes, revealed on push</span> : <span className="status">none</span>}</td>
@@ -174,9 +178,11 @@ export default function Lookup() {
           </section>
 
           <div className="pushbar">
-            <span className="cnt"><b>{nSel}</b> contacts ticked · up to <b>{nEmail}</b> lookup credits · creates the company, the contacts, the note and the outreach deal</span>
+            <span className="cnt"><b>{nSel}</b> contacts ticked · uses up to <b>{nEmail}</b> of your <b>{nf(left)}</b> credits · creates the company, the contacts, the note and the outreach deal</span>
             {me.sample && <span className="hint">Sample mode: pushing is off.</span>}
-            <button className="btn" type="button" onClick={push} disabled={me.sample || nSel === 0}><Icon name="push" />Push to Launchpad</button>
+            {!me.sample && left <= 0 && <span className="warn">No credits left: ask your Launchpad team to top up.</span>}
+            {!me.sample && left > 0 && nEmail > left && <span className="warn">Only {nf(left)} credits left: untick {nEmail - left}.</span>}
+            <button className="btn" type="button" onClick={push} disabled={me.sample || nSel === 0 || blocked}><Icon name="push" />Push to Launchpad</button>
           </div>
         </>
       )}

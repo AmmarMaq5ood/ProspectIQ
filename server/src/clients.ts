@@ -65,7 +65,50 @@ export function listClients(): Client[] {
 export function getClient(slug: string): Client | null {
   if (!/^[a-z0-9-]{2,40}$/.test(slug)) return null;
   const file = path.join(config.dataDir, 'clients', slug, 'client.json');
-  return readJson<Client | null>(file, null);
+  const c = readJson<Client | null>(file, null);
+  return c ? normalize(c) : null;
+}
+
+/** Records written by older versions get the newer fields. */
+function normalize(c: Client): Client {
+  const raw = c as Client & { limits?: unknown };
+  if (!c.credits || typeof c.credits.total !== 'number') c.credits = { total: 1000, used: 0 };
+  if (!c.flags) c.flags = { show_usage: false };
+  delete raw.limits;
+  return c;
+}
+
+/** The client whose Launchpad sub-account this is (for the one dynamic menu link). */
+export function getClientByLocation(locationId: string): Client | null {
+  const id = locationId.trim();
+  if (!id) return null;
+  return listClients().find((c) => c.enabled && c.launchpad.location_id === id) || null;
+}
+
+/* ---- agency-wide settings: the secret inside the universal menu link ---- */
+
+const SETTINGS = () => path.join(config.dataDir, 'settings.json');
+
+export interface AgencySettings { link_secret: string }
+
+export function agencySettings(): AgencySettings {
+  const s = readJson<Partial<AgencySettings>>(SETTINGS(), {});
+  if (!s.link_secret) {
+    s.link_secret = newKey();
+    writeJson(SETTINGS(), s);
+  }
+  return s as AgencySettings;
+}
+
+export function rotateLinkSecret(): AgencySettings {
+  const s = { ...agencySettings(), link_secret: newKey() };
+  writeJson(SETTINGS(), s);
+  return s;
+}
+
+/** The one link that works in every sub-account: Launchpad fills in {{location.id}} when the menu item is opened. */
+export function universalLink(): string {
+  return `${config.publicUrl}/?loc={{location.id}}&k=${encodeURIComponent(agencySettings().link_secret)}`;
 }
 
 export function getClientByKey(key: string): Client | null {
@@ -106,7 +149,8 @@ export function createClient(input: { slug: string; name: string; profile?: Part
     created: Date.now(),
     launchpad: { location_id: '', token: '', app_url: config.launchpadApp, pipeline: 'Business Development', quote_stage: 'Quoted', owner: '', timezone: 'America/New_York', users: {} },
     keys: { openai: '', openai_model: '', apollo: '' },
-    limits: { credits_per_month: 0 },
+    credits: { total: 1000, used: 0 },
+    flags: { show_usage: false },
     profile: { ...blankProfile(input.name.trim()), ...(input.profile || {}) },
   };
   return saveClient(client);
@@ -135,6 +179,8 @@ export function publicClient(client: Client) {
     has_openai: !!keys.openai,
     has_apollo: !!keys.apollo,
     has_launchpad: !!(client.launchpad.token && client.launchpad.location_id),
+    credits: { total: client.credits.total, used: client.credits.used, left: Math.max(0, client.credits.total - client.credits.used) },
+    show_usage: !!client.flags.show_usage,
   };
 }
 
@@ -149,4 +195,5 @@ function timingSafeEqual(a: string, b: string): boolean {
 export function initData(): void {
   ensureDir(path.join(config.dataDir, 'clients'));
   if (!fs.existsSync(INDEX())) writeJson(INDEX(), []);
+  agencySettings();
 }

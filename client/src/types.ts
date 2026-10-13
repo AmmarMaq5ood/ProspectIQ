@@ -67,6 +67,8 @@ export interface Person {
   domain: string;
   departments: string[];
   role?: string;
+  /** Set when this person is already a Launchpad contact. */
+  in_lp?: { id: string; name: string };
 }
 
 export interface Org {
@@ -126,6 +128,8 @@ export interface PublicClient {
   has_openai: boolean;
   has_apollo: boolean;
   has_launchpad: boolean;
+  credits: { total: number; used: number; left: number };
+  show_usage: boolean;
 }
 
 export interface Me { client: PublicClient | null; admin: boolean; sample: boolean }
@@ -182,7 +186,11 @@ export interface PushResult {
 
 export interface PushLinks { company: string; opportunity: string; contacts: string[] }
 
-export interface PeoplePushed { results: PushResult[]; errors: string[]; credits?: number; links: PushLinks[]; bd: string }
+export interface PeoplePushed { results: PushResult[]; errors: string[]; credits?: number; credits_spent?: number; credits_left?: number; links: PushLinks[]; bd: string }
+
+export interface CreditEntry { t: number; delta: number; reason: string; by: string; left: number }
+
+export interface Credits { total: number; used: number; left: number }
 
 export interface CompaniesPushed { results: { name: string; id: string; domain: string }[]; errors: string[]; links: string[] }
 
@@ -237,7 +245,8 @@ export interface Client {
     users: Record<string, string>;
   };
   keys: { openai: string; openai_model: string; apollo: string };
-  limits: { credits_per_month: number };
+  credits: { total: number; used: number };
+  flags: { show_usage: boolean };
   profile: Profile;
 }
 

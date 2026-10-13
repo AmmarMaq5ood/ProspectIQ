@@ -5,7 +5,7 @@ import { useApp } from '../App';
 import { useBusy } from '../components/Busy';
 import { Chips } from '../components/Chips';
 import { Icon } from '../components/Icon';
-import { Checks, Errors, Field, Group, Pager, PerPage, PushedCompanies, PushedPeople, Range } from '../components/ui';
+import { Checks, Errors, Field, Group, InLp, LpFilter, Pager, PerPage, PushedCompanies, PushedPeople, Range } from '../components/ui';
 import { roleFromTitle } from '../roles';
 import { filtersToQuery } from './Ask';
 import type { CompaniesPushed, Filters, Org, PeoplePushed, Person, SearchResult } from '../types';
@@ -35,11 +35,12 @@ const count = (f: Filters, keys: (keyof Filters)[]) => keys.reduce((n, k) => { c
 
 /** The People, Companies and Industries tabs: a filter rail, a table, a push bar. */
 export default function Research({ mode }: { mode: Mode }) {
-  const { me, options } = useApp();
+  const { me, options, reload } = useApp();
   const c = me.client!;
   const busy = useBusy();
   const nav = useNavigate();
   const [params, setParams] = useSearchParams();
+  const [hideLp, setHideLp] = useState(false);
   const people = mode === 'people';
   const kind = people ? 'people' : 'companies';
   const filters = decode(params);
@@ -65,11 +66,16 @@ export default function Research({ mode }: { mode: Mode }) {
 
   const search = (f: Filters, over: Record<string, string> = {}) => setParams(new URLSearchParams(filtersToQuery({ ...f }) + (Object.keys(over).length ? `&${new URLSearchParams(over)}` : '')));
 
-  const rows = res?.rows || [];
+  const allRows = res?.rows || [];
+  const inLp = (r: Person | Org) => people && !!(r as Person).in_lp;
+  const nLp = allRows.filter(inLp).length;
+  const rows = hideLp ? allRows.filter((r) => !inLp(r)) : allRows;
   const withEmail = (r: Person | Org) => people && (!!(r as Person).has_email || !!(r as Person).email);
   const nSel = rows.filter((r) => picks.has(r.id)).length;
   const nEmail = rows.filter((r) => picks.has(r.id) && withEmail(r)).length;
-  const pick = (m: 'all' | 'none' | 'email') => setPicks(new Set(rows.filter((r) => m === 'all' || (m === 'email' && withEmail(r))).map((r) => r.id)));
+  const left = c.credits.left;
+  const blocked = people && (left <= 0 || nEmail > left);
+  const pick = (m: 'all' | 'none' | 'email' | 'new') => setPicks(new Set(rows.filter((r) => m === 'all' || (m === 'email' && withEmail(r)) || (m === 'new' && !inLp(r))).map((r) => r.id)));
   const toggle = (id: string, on: boolean) => setPicks((s) => { const n = new Set(s); if (on) n.add(id); else n.delete(id); return n; });
 
   const push = async () => {
@@ -83,6 +89,7 @@ export default function Research({ mode }: { mode: Mode }) {
         setPushed({ companies: r });
       }
       setPicks(new Set());
+      await reload();
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (e) {
       setErr(errText(e));
@@ -144,16 +151,21 @@ export default function Research({ mode }: { mode: Mode }) {
                     <span className="hint">Operations, supply chain, logistics and quality, manager and up. Change anything on the People tab.</span>
                   </div>
                 )}
-                <p className="sel-line">Select <a onClick={() => pick('all')}>all on this page</a> · <a onClick={() => pick('none')}>none</a>{people && <> · <a onClick={() => pick('email')}>only those with an email</a></>}</p>
+                <div className="filters-row">
+                  <p className="sel-line" style={{ margin: 0 }}>Select <a onClick={() => pick('all')}>all on this page</a> · <a onClick={() => pick('none')}>none</a>{people && <> · <a onClick={() => pick('email')}>only those with an email</a>{nLp > 0 && <> · <a onClick={() => pick('new')}>only new to Launchpad</a></>}</>}</p>
+                  <LpFilter n={nLp} hide={hideLp} onChange={setHideLp} />
+                </div>
                 {people
                   ? <PeopleTable rows={rows as Person[]} picks={picks} toggle={toggle} roles={roles} setRole={(id, v) => setRoles((m) => ({ ...m, [id]: v }))} roleList={c.profile.roles} onAll={(on) => pick(on ? 'all' : 'none')} />
                   : <CompaniesTable rows={rows as Org[]} picks={picks} toggle={toggle} onAll={(on) => pick(on ? 'all' : 'none')} onPeople={(d) => nav(peopleAtHref(d))} />}
                 <Pager res={res} onPage={(p) => search(filters, { page: String(p), pp: String(pp) })} />
               </div>
               <div className="pushbar">
-                <span className="cnt"><b>{nSel}</b> selected{people ? <> · up to <b>{nEmail}</b> lookup credits · creates the company, the contacts with roles, a research note and the outreach deal</> : ' · creates a company record for each'}</span>
+                <span className="cnt"><b>{nSel}</b> selected{people ? <> · uses up to <b>{nEmail}</b> of your <b>{nf(left)}</b> credits · creates the company, the contacts with roles, a research note and the outreach deal</> : ' · creates a company record for each'}</span>
                 {me.sample && <span className="hint">Sample mode: pushing is off.</span>}
-                <button className="btn" type="button" onClick={push} disabled={me.sample || nSel === 0}><Icon name="push" />Push to Launchpad</button>
+                {!me.sample && people && left <= 0 && <span className="warn">No credits left: ask your Launchpad team to top up.</span>}
+                {!me.sample && people && left > 0 && nEmail > left && <span className="warn">Only {nf(left)} credits left: untick {nEmail - left}.</span>}
+                <button className="btn" type="button" onClick={push} disabled={me.sample || nSel === 0 || blocked}><Icon name="push" />Push to Launchpad</button>
               </div>
             </>
           )}
@@ -242,12 +254,12 @@ function PeopleTable({ rows, picks, toggle, roles, setRole, roleList, onAll }: {
         <thead><tr><th scope="col"><AllBox rows={rows} picks={picks} onAll={onAll} /></th><th scope="col">Name</th><th scope="col">Title</th><th scope="col">Company</th><th scope="col">On file</th><th scope="col">Role in Launchpad</th></tr></thead>
         <tbody>
           {rows.map((p) => (
-            <tr key={p.id}>
+            <tr key={p.id} className={p.in_lp ? 'dim' : ''}>
               <td><input type="checkbox" checked={picks.has(p.id)} onChange={(e) => toggle(p.id, e.target.checked)} aria-label={`Select ${fullName(p)}`} /></td>
               <td><span className="nm">{fullName(p)}</span>{p.city && <span className="st">{p.city}</span>}{p.email && <span className="st">{p.email}</span>}</td>
               <td>{p.title}</td>
               <td><span className="nm">{p.company}</span>{p.domain && <span className="st">{p.domain}</span>}</td>
-              <td>{(p.has_email || p.email) && <span className="pill good">email</span>} {p.has_phone && <span className="pill">phone</span>} {(p.has_city || p.city) && <span className="pill">location</span>}{!(p.has_email || p.email || p.has_phone || p.has_city || p.city) && <span className="status">—</span>}</td>
+              <td><InLp p={p} /> {(p.has_email || p.email) && <span className="pill good">email</span>} {p.has_phone && <span className="pill">phone</span>} {(p.has_city || p.city) && <span className="pill">location</span>}{!(p.in_lp || p.has_email || p.email || p.has_phone || p.has_city || p.city) && <span className="status">—</span>}</td>
               <td><select aria-label="Role" value={roles[p.id] || roleFromTitle(p.title, roleList)} onChange={(e) => setRole(p.id, e.target.value)}>{roleList.map((r) => <option key={r}>{r}</option>)}</select></td>
             </tr>
           ))}
