@@ -11,6 +11,14 @@ export class ApiError extends Error {
 /** Where the app is served from (Vite's base, e.g. /prospectiq/), without the trailing slash. */
 export const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
 
+/** The signed-in key, kept for this tab and sent as a header too: inside Launchpad's iframe some browsers drop the cookie. */
+let accessKey = '';
+try { accessKey = sessionStorage.getItem('piq_key') || ''; } catch { /* storage blocked */ }
+export function setKey(k: string): void {
+  accessKey = k || '';
+  try { if (k) sessionStorage.setItem('piq_key', k); else sessionStorage.removeItem('piq_key'); } catch { /* storage blocked */ }
+}
+
 let sampleFlag = false;
 export const setSample = (on: boolean) => { sampleFlag = on; };
 export const isSample = () => sampleFlag;
@@ -23,9 +31,12 @@ export async function api<T>(path: string, opts: { method?: string; body?: unkno
   if (sampleFlag) q.set('sample', '1');
   const qs = q.toString() ? `?${q}` : '';
   const method = opts.method || (opts.body !== undefined ? 'POST' : 'GET');
+  const headers: Record<string, string> = {};
+  if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
+  if (accessKey) headers['X-PIQ-Key'] = accessKey;
   const r = await fetch(`${BASE}/api${path}${qs}`, {
     method,
-    headers: opts.body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+    headers,
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
     credentials: 'same-origin',
   });
@@ -109,6 +120,11 @@ export const peopleAtHref = (domain: string) => `/people?domains=${encodeURIComp
 
 /** The contact's page inside Launchpad (for "already a contact"). */
 export const lpContactHref = (c: { launchpad_app: string; location_id: string }, id: string) => (c.launchpad_app && c.location_id && id ? `${c.launchpad_app.replace(/\/$/, '')}/v2/location/${encodeURIComponent(c.location_id)}/contacts/detail/${encodeURIComponent(id)}` : '');
+
+/** The out-of-credits message, with the reset date and who to email. */
+export function outOfCredits(c: { credits: { monthly: number; resets_label: string }; support_email: string }): string {
+  return `You are out of credits. Your ${nf(c.credits.monthly)} monthly credits reset on ${c.credits.resets_label}.${c.support_email ? ` To upgrade your plan, email ${c.support_email}.` : ' Contact your Launchpad team to upgrade your plan.'}`;
+}
 
 export const ctxLabel = (c: string): string => {
   const map: Record<string, string> = { 'research:ask': 'Ask', 'research:people': 'People', 'research:companies': 'Companies', 'research:industries': 'Industries', 'research:lookup': 'Company lookup', usage: 'Usage page', 'admin:draft': 'Admin · profile draft', me: 'Sign-in' };

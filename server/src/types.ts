@@ -140,8 +140,8 @@ export interface Client {
     openai_model: string;
     apollo: string;
   };
-  /** One-time credit pool: one credit per lead added to Launchpad with a work email. Topped up in the admin panel. */
-  credits: { total: number; used: number };
+  /** Monthly credits: one per lead added to Launchpad with a work email. `monthly` resets `used` on the 1st; `extra` is this month's bonus. */
+  credits: { monthly: number; used: number; period: string; extra: number };
   flags: { show_usage: boolean };
   profile: Profile;
 }

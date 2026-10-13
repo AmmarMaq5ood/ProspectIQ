@@ -1,8 +1,8 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import path from 'node:path';
 import { config } from './config.js';
-import { createClient, deleteClient, effectiveKeys, getClient, getClientByKey, getClientByLocation, listClients, newKey, publicClient, rotateLinkSecret, saveClient, agencySettings, universalLink } from './clients.js';
-import { addCredits, creditCheck, creditLedger, creditsLeft, setCreditsTotal, spendCredits } from './credits.js';
+import { createClient, deleteClient, effectiveKeys, getClient, getClientByKey, getClientByLocation, listClients, newKey, publicClient, rotateLinkSecret, saveClient, saveAgencySettings, agencySettings, universalLink } from './clients.js';
+import { addCredits, creditCheck, creditLedger, creditsLeft, creditsView, setMonthly, spendCredits } from './credits.js';
 import { annotateInLaunchpad, markPushed } from './lpindex.js';
 import { DEPARTMENTS, EMAIL_STATUS, EMPLOYEE_RANGES, FUNDING, PER_PAGE, SENIORITY, enrichPerson, orgByDomain, planLimits, searchCompanies, searchPeople, type ApolloCtx } from './apollo.js';
 import { cleanFilters, cleanIntent, filtersActive, intentFilters, normDomain } from './rules.js';
@@ -36,7 +36,7 @@ api.post('/auth/key', (req, res) => {
   const client = getClientByKey(key);
   if (!client) return res.status(401).json({ error: 'That access key is not valid.' });
   res.cookie('piq_client', key, cookieOpts(req));
-  res.json({ ok: true, client: publicClient(client) });
+  res.json({ ok: true, client: publicClient(client), key });
 });
 
 api.post('/auth/location', (req, res) => {
@@ -47,7 +47,7 @@ api.post('/auth/location', (req, res) => {
   const client = getClientByLocation(loc);
   if (!client) return res.status(404).json({ error: 'not_setup', message: 'This Launchpad account is not set up for ProspectIQ yet.' });
   res.cookie('piq_client', client.access_key, cookieOpts(req));
-  res.json({ ok: true, client: publicClient(client) });
+  res.json({ ok: true, client: publicClient(client), key: client.access_key });
 });
 
 api.post('/auth/admin', (req, res) => {
@@ -68,10 +68,11 @@ function isAdmin(req: Request): boolean {
   return !!config.adminKey && k === config.adminKey;
 }
 
+/** The client cookie, or the same key in a header for browsers that drop cookies inside Launchpad's iframe. */
 function clientFrom(req: Request): Client | null {
   const asSlug = String(req.query.as || req.body?.as || '');
   if (asSlug && isAdmin(req)) return getClient(asSlug);
-  return getClientByKey(String(req.cookies?.piq_client || ''));
+  return getClientByKey(String(req.cookies?.piq_client || req.get('x-piq-key') || ''));
 }
 
 function ctxFor(req: Request, client: Client, ctx: string): Ctx {
@@ -292,7 +293,7 @@ api.get('/usage', requireClient('usage'), wrap(async (req, res) => {
   const summary = usageCompute(usageRead(client.slug, days), days, client.launchpad.timezone);
   let plan: unknown[] = [];
   if (admin && live && !sample) { try { plan = await planLimits(apollo); } catch { plan = []; } }
-  res.json({ summary: admin ? summary : stripCost(summary), plan, show_cost: admin, credits: { total: client.credits.total, used: client.credits.used, left: creditsLeft(client) }, ledger: creditLedger(client.slug, 30) });
+  res.json({ summary: admin ? summary : stripCost(summary), plan, show_cost: admin, credits: creditsView(client), ledger: creditLedger(client.slug, 30) });
 }));
 
 /** What a client may see: counts and tokens, never money. */
@@ -347,22 +348,30 @@ admin.put('/clients/:slug', (req, res) => {
 admin.get('/clients/:slug/credits', (req, res) => {
   const c = getClient(String(req.params.slug));
   if (!c) return res.status(404).json({ error: 'No such client.' });
-  res.json({ credits: { total: c.credits.total, used: c.credits.used, left: creditsLeft(c) }, ledger: creditLedger(c.slug, 100) });
+  res.json({ credits: creditsView(c), ledger: creditLedger(c.slug, 100) });
 });
 
 admin.post('/clients/:slug/credits', (req, res) => {
   let c = getClient(String(req.params.slug));
   if (!c) return res.status(404).json({ error: 'No such client.' });
   const add = Number(req.body?.add);
-  const total = Number(req.body?.total);
-  if (Number.isFinite(add) && add !== 0) c = addCredits(c, add, String(req.body?.reason || (add > 0 ? 'top-up' : 'adjustment')).slice(0, 120));
-  else if (Number.isFinite(total)) c = setCreditsTotal(c, total);
-  else return res.status(400).json({ error: 'Send add (a number of credits) or total.' });
-  res.json({ credits: { total: c.credits.total, used: c.credits.used, left: creditsLeft(c) }, ledger: creditLedger(c.slug, 100) });
+  const monthly = Number(req.body?.monthly);
+  if (Number.isFinite(add) && add !== 0) c = addCredits(c, add, String(req.body?.reason || (add > 0 ? 'bonus credits' : 'adjustment')).slice(0, 120));
+  else if (Number.isFinite(monthly)) c = setMonthly(c, monthly);
+  else return res.status(400).json({ error: 'Send add (bonus credits for this month) or monthly (the allowance).' });
+  res.json({ credits: creditsView(c), ledger: creditLedger(c.slug, 100) });
 });
 
 admin.get('/link', (_req, res) => {
-  res.json({ url: universalLink(), secret_set: !!agencySettings().link_secret });
+  const s = agencySettings();
+  res.json({ url: universalLink(), secret_set: !!s.link_secret, support_email: s.support_email });
+});
+
+admin.put('/settings', (req, res) => {
+  const email = String(req.body?.support_email ?? '').trim().slice(0, 120);
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'That does not look like an email address.' });
+  const s = saveAgencySettings({ support_email: email });
+  res.json({ support_email: s.support_email });
 });
 
 admin.post('/link/rotate', (_req, res) => {

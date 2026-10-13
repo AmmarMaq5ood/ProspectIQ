@@ -1,18 +1,56 @@
 import path from 'node:path';
 import { appendLine, clientDir, readLines } from './store.js';
-import { getClient, saveClient } from './clients.js';
+import { agencySettings, getClient, saveClient } from './clients.js';
 import type { Client, CreditEntry } from './types.js';
 
 /**
- * The credit pool. Searching is free; one credit is spent for each lead that
- * lands in Launchpad as a new contact with a work email. The pool is one-time:
- * the agency tops it up in the admin panel. Every change is appended to the
- * client's credits.jsonl so the admin can see where they went.
+ * Monthly credits. Searching is free; one credit is spent for each lead that
+ * lands in Launchpad as a new contact with a work email. Every client gets a
+ * monthly allowance (1,000 by default) that resets on the 1st in the client's
+ * timezone; the agency can raise the allowance or add bonus credits for the
+ * current month. Every change is appended to credits.jsonl.
  */
 
-export const creditsLeft = (c: Client): number => Math.max(0, (c.credits?.total || 0) - (c.credits?.used || 0));
+export const DEFAULT_MONTHLY = 1000;
+
+/** "2026-10" in the client's timezone. */
+export function currentPeriod(timeZone: string, now = Date.now()): string {
+  try {
+    const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: timeZone || 'UTC', year: 'numeric', month: '2-digit' }).formatToParts(new Date(now)).map((x) => [x.type, x.value]));
+    return `${p.year}-${p.month}`;
+  } catch {
+    const d = new Date(now);
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+  }
+}
+
+/** The first day of the next month, as "2026-11-01" and as "Nov 1, 2026". */
+export function resetDate(timeZone: string, now = Date.now()): { iso: string; label: string } {
+  const [y, m] = currentPeriod(timeZone, now).split('-').map(Number);
+  const ny = m === 12 ? y + 1 : y;
+  const nm = m === 12 ? 1 : m + 1;
+  const iso = `${ny}-${String(nm).padStart(2, '0')}-01`;
+  const label = new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(Date.UTC(ny, nm - 1, 1)));
+  return { iso, label };
+}
+
+export const creditsTotal = (c: Client): number => Math.max(0, (c.credits?.monthly || 0) + (c.credits?.extra || 0));
+export const creditsLeft = (c: Client): number => Math.max(0, creditsTotal(c) - (c.credits?.used || 0));
 
 const file = (slug: string) => path.join(clientDir(slug), 'credits.jsonl');
+
+/** New month: the counter starts again. Called whenever a client record is read. Returns true when it rolled over. */
+export function rollover(c: Client, save = true): boolean {
+  const period = currentPeriod(c.launchpad?.timezone || 'UTC');
+  if (c.credits.period === period) return false;
+  const had = c.credits.period;
+  c.credits = { ...c.credits, used: 0, extra: 0, period };
+  if (save) {
+    saveClient(c);
+    if (had) appendLine(file(c.slug), { t: Date.now(), delta: 0, reason: `monthly reset (${period}): ${c.credits.monthly.toLocaleString('en-US')} credits`, by: 'system', left: creditsLeft(c) } satisfies CreditEntry);
+  }
+  return true;
+}
 
 /** Re-read the record first so two pushes in flight never overwrite each other's counter. */
 function fresh(client: Client): Client {
@@ -29,22 +67,24 @@ export function spendCredits(client: Client, n: number, reason: string, by = 'cl
   return creditsLeft(c);
 }
 
+/** Bonus credits for the current month only (they vanish at the reset). */
 export function addCredits(client: Client, n: number, reason: string, by = 'admin'): Client {
   const c = fresh(client);
-  c.credits.total = Math.max(0, c.credits.total + Math.round(n));
+  c.credits.extra = Math.max(0, (c.credits.extra || 0) + Math.round(n));
   saveClient(c);
-  appendLine(file(c.slug), { t: Date.now(), delta: Math.round(n), reason, by, left: creditsLeft(c) } satisfies CreditEntry);
+  appendLine(file(c.slug), { t: Date.now(), delta: Math.round(n), reason: `${reason} (this month)`, by, left: creditsLeft(c) } satisfies CreditEntry);
   return c;
 }
 
-export function setCreditsTotal(client: Client, total: number, by = 'admin'): Client {
+/** The allowance every month from now on. */
+export function setMonthly(client: Client, monthly: number, by = 'admin'): Client {
   const c = fresh(client);
-  const next = Math.max(0, Math.round(total));
-  const delta = next - c.credits.total;
+  const next = Math.max(0, Math.round(monthly));
+  const delta = next - c.credits.monthly;
   if (delta === 0) return c;
-  c.credits.total = next;
+  c.credits.monthly = next;
   saveClient(c);
-  appendLine(file(c.slug), { t: Date.now(), delta, reason: 'pool set in admin', by, left: creditsLeft(c) } satisfies CreditEntry);
+  appendLine(file(c.slug), { t: Date.now(), delta, reason: `monthly allowance set to ${next.toLocaleString('en-US')}`, by, left: creditsLeft(c) } satisfies CreditEntry);
   return c;
 }
 
@@ -52,10 +92,23 @@ export function creditLedger(slug: string, limit = 60): CreditEntry[] {
   return readLines<CreditEntry>(file(slug), () => true).slice(-limit).reverse();
 }
 
-/** The message a client sees when a push would need more credits than are left. */
+/** What a client sees about their credits. */
+export function creditsView(c: Client) {
+  const r = resetDate(c.launchpad.timezone);
+  return { monthly: c.credits.monthly, extra: c.credits.extra || 0, used: c.credits.used, total: creditsTotal(c), left: creditsLeft(c), period: c.credits.period, resets_on: r.iso, resets_label: r.label };
+}
+
+/** The out-of-credits line, as Tabish asked for it: the reset date and who to email for a bigger plan. */
+export function outOfCreditsText(c: Client): string {
+  const r = resetDate(c.launchpad.timezone);
+  const support = agencySettings().support_email;
+  return `You are out of credits. Your ${c.credits.monthly.toLocaleString('en-US')} monthly credits reset on ${r.label}.${support ? ` To upgrade your plan, email ${support}.` : ' Contact your Launchpad team to upgrade your plan.'}`;
+}
+
+/** The message a client sees when a push would need more credits than are left ('' when fine). */
 export function creditCheck(client: Client, need: number): string {
   const left = creditsLeft(client);
-  if (left <= 0) return 'No credits left. Ask your Launchpad team to top up before pushing more leads.';
-  if (need > left) return `Only ${left} credit${left === 1 ? '' : 's'} left and ${need} of the ticked leads have an email. Untick ${need - left} or ask your Launchpad team to top up.`;
+  if (left <= 0) return outOfCreditsText(client);
+  if (need > left) return `Only ${left} credit${left === 1 ? '' : 's'} left this month and ${need} of the ticked leads have an email. Untick ${need - left}, or wait for the reset on ${resetDate(client.launchpad.timezone).label}.`;
   return '';
 }

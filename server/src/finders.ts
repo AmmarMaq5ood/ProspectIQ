@@ -9,7 +9,7 @@ import { cleanIntent, intentFilters } from './rules.js';
 import { fitLines, type LlmCtx } from './llm.js';
 import { lpOf, lpReady } from './launchpad.js';
 import { annotateInLaunchpad } from './lpindex.js';
-import { creditsLeft, spendCredits } from './credits.js';
+import { creditsLeft, outOfCreditsText, spendCredits } from './credits.js';
 import { pushCompanies, pushPeople } from './push.js';
 import type { Client, Finder, Org, Person } from './types.js';
 
@@ -131,7 +131,7 @@ export async function runFinder(client: Client, f: Finder, live: boolean): Promi
   let want = Math.max(1, f.per_run);
   const left = creditsLeft(client);
   if (intent.kind === 'people' && live) {
-    if (left <= 0) return { ok: false, text: 'No credits left: the finder did not run. Ask your Launchpad team to top up.', pushed: [], credits: 0, spent: 0, left: 0, skipped: 0, seen: [...seen] };
+    if (left <= 0) return { ok: false, text: `The finder did not run. ${outOfCreditsText(client)}`, pushed: [], credits: 0, spent: 0, left: 0, skipped: 0, seen: [...seen] };
     want = Math.min(want, left);
   }
   const picked: (Person | Org)[] = [];

@@ -230,33 +230,35 @@ function KeysTab({ c, set, onSave }: { c: Client; set: (fn: (x: Client) => void)
 function CreditsTab({ c, slug, onToggleUsage }: { c: Client; slug: string; onToggleUsage: (v: boolean) => void }) {
   const [cr, setCr] = useState<{ credits: Credits; ledger: CreditEntry[] } | null>(null);
   const [add, setAdd] = useState(100);
-  const [total, setTotal] = useState(c.credits.total);
+  const [monthly, setMonthly] = useState(c.credits.monthly);
   const [err, setErr] = useState('');
-  const load = () => api<{ credits: Credits; ledger: CreditEntry[] }>(`/admin/clients/${encodeURIComponent(slug)}/credits`).then((r) => { setCr(r); setTotal(r.credits.total); }).catch((e) => setErr(errText(e)));
+  const load = () => api<{ credits: Credits; ledger: CreditEntry[] }>(`/admin/clients/${encodeURIComponent(slug)}/credits`).then((r) => { setCr(r); setMonthly(r.credits.monthly); }).catch((e) => setErr(errText(e)));
   useEffect(() => { load(); }, [slug]);
   const post = async (body: Record<string, unknown>) => {
     setErr('');
-    try { const r = await api<{ credits: Credits; ledger: CreditEntry[] }>(`/admin/clients/${encodeURIComponent(slug)}/credits`, { body }); setCr(r); setTotal(r.credits.total); }
+    try { const r = await api<{ credits: Credits; ledger: CreditEntry[] }>(`/admin/clients/${encodeURIComponent(slug)}/credits`, { body }); setCr(r); setMonthly(r.credits.monthly); }
     catch (e) { setErr(errText(e)); }
   };
-  const cur = cr?.credits || { total: c.credits.total, used: c.credits.used, left: Math.max(0, c.credits.total - c.credits.used) };
+  const cur: Credits = cr?.credits || { monthly: c.credits.monthly, extra: c.credits.extra, used: c.credits.used, total: c.credits.monthly + c.credits.extra, left: Math.max(0, c.credits.monthly + c.credits.extra - c.credits.used), period: c.credits.period, resets_on: '', resets_label: '' };
   return (
     <>
       <section className="card" style={{ marginBottom: 12 }}>
-        <h2>Credit pool</h2>
-        <p className="sub">One credit per lead added to Launchpad as a new contact with a work email. Searching is free. The pool is one-time: top it up here when it runs low. At zero, pushes and finders stop until you do.</p>
+        <h2>Monthly credits</h2>
+        <p className="sub">One credit per lead added to Launchpad as a new contact with a work email. Searching is free. The allowance resets on the 1st of each month in the client's timezone. At zero, pushes and finders stop and the client sees the reset date and the support email.</p>
         {err && <Notice kind="err"><p>{err}</p></Notice>}
         <div className="credits-card">
-          <CreditsRing big total={cur.total} used={cur.used} left={cur.left} />
+          <CreditsRing big total={cur.total} used={cur.used} left={cur.left} resets={cur.resets_label} />
           <dl className="kv">
-            <dt>Pool</dt><dd><b><Num value={cur.total} /></b></dd>
-            <dt>Used</dt><dd><Num value={cur.used} /></dd>
+            <dt>Monthly allowance</dt><dd><b><Num value={cur.monthly} /></b></dd>
+            <dt>Bonus this month</dt><dd><Num value={cur.extra} /></dd>
+            <dt>Used this month</dt><dd><Num value={cur.used} /></dd>
             <dt>Left</dt><dd><Num value={cur.left} /></dd>
+            <dt>Resets on</dt><dd>{cur.resets_label || '—'}</dd>
           </dl>
         </div>
         <div className="form-grid" style={{ marginTop: 16 }}>
-          <div><label className="f" htmlFor="cadd">Add credits</label><div className="search-row"><input type="number" id="cadd" min={1} step={50} value={add} onChange={(e) => setAdd(Math.max(1, Number(e.target.value) || 1))} /><button className="btn" type="button" onClick={() => post({ add, reason: 'top-up' })}><Icon name="plus" />Add</button></div></div>
-          <div><label className="f" htmlFor="ctot">Or set the pool total</label><div className="search-row"><input type="number" id="ctot" min={0} step={50} value={total} onChange={(e) => setTotal(Math.max(0, Number(e.target.value) || 0))} /><button className="btn secondary" type="button" onClick={() => post({ total })}>Set total</button></div></div>
+          <div><label className="f" htmlFor="cmon">Monthly allowance (every month from now on)</label><div className="search-row"><input type="number" id="cmon" min={0} step={100} value={monthly} onChange={(e) => setMonthly(Math.max(0, Number(e.target.value) || 0))} /><button className="btn" type="button" onClick={() => post({ monthly })}><Icon name="check" />Set</button></div></div>
+          <div><label className="f" htmlFor="cadd">Bonus credits for this month only</label><div className="search-row"><input type="number" id="cadd" min={1} step={50} value={add} onChange={(e) => setAdd(Math.max(1, Number(e.target.value) || 1))} /><button className="btn secondary" type="button" onClick={() => post({ add, reason: 'bonus credits' })}><Icon name="plus" />Add</button></div></div>
         </div>
       </section>
       <section className="card" style={{ marginBottom: 12 }}>
@@ -266,7 +268,7 @@ function CreditsTab({ c, slug, onToggleUsage }: { c: Client; slug: string; onTog
       </section>
       <section className="card">
         <h2>Credit history</h2>
-        <p className="sub">Newest first. Spends come from pushes and finders; top-ups from this page.</p>
+        <p className="sub">Newest first. Spends come from pushes and finders; allowance changes, bonuses and monthly resets from the system and this page.</p>
         {cr && cr.ledger.length ? (
           <table className="ledger">
             <thead><tr><th scope="col">When</th><th scope="col" className="num">Change</th><th scope="col">Reason</th><th scope="col">By</th><th scope="col" className="num">Left after</th></tr></thead>

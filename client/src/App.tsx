@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { Link, Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
-import { ApiError, api, errText, setSample } from './api';
+import { ApiError, api, errText, setKey, setSample } from './api';
 import type { Me, Options } from './types';
 import { BusyProvider, useBusy } from './components/Busy';
 import { CreditsRing, TopProgress } from './components/Motion';
@@ -42,9 +42,9 @@ export default function App() {
       if (p.get('sample') === '1') setSample(true);
       const locId = p.get('loc');
       const k = p.get('k');
-      if (key) { try { await api('/auth/key', { body: { key } }); } catch (e) { setBoot(errText(e)); } }
+      if (key) { try { const r = await api<{ key?: string }>('/auth/key', { body: { key } }); setKey(r.key || key); } catch (e) { setBoot(errText(e)); } }
       else if (locId && k) {
-        try { await api('/auth/location', { body: { loc: locId, k } }); }
+        try { const r = await api<{ key?: string }>('/auth/location', { body: { loc: locId, k } }); setKey(r.key || ''); }
         catch (e) { if (e instanceof ApiError && e.status === 404) setNotSetup(true); else setBoot(errText(e)); }
       }
       try {
@@ -103,7 +103,7 @@ function Shell() {
   const loc = useLocation();
   const busy = useBusy();
   const c = me.client!;
-  const signOut = async () => { await api('/auth/logout', { body: {} }); await reload(); nav('/login'); };
+  const signOut = async () => { await api('/auth/logout', { body: {} }); setKey(''); await reload(); nav('/login'); };
   return (
     <>
       <TopProgress active={busy.active} />
@@ -113,7 +113,7 @@ function Shell() {
           <p className="sub">{c.name} · Find the buyers and companies you want in plain words, then push them into Launchpad.</p>
         </div>
         <div className="ctrls">
-          <CreditsRing total={c.credits.total} used={c.credits.used} left={c.credits.left} />
+          <CreditsRing total={c.credits.total} used={c.credits.used} left={c.credits.left} resets={c.credits.resets_label} />
           {me.admin && <Link className="btn secondary sm" to="/admin"><Icon name="settings" />Admin</Link>}
           {me.admin && <button className="btn ghost sm" type="button" onClick={signOut}>Sign out</button>}
         </div>

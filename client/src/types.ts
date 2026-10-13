@@ -128,8 +128,9 @@ export interface PublicClient {
   has_openai: boolean;
   has_apollo: boolean;
   has_launchpad: boolean;
-  credits: { total: number; used: number; left: number };
+  credits: Credits;
   show_usage: boolean;
+  support_email: string;
 }
 
 export interface Me { client: PublicClient | null; admin: boolean; sample: boolean }
@@ -190,7 +191,7 @@ export interface PeoplePushed { results: PushResult[]; errors: string[]; credits
 
 export interface CreditEntry { t: number; delta: number; reason: string; by: string; left: number }
 
-export interface Credits { total: number; used: number; left: number }
+export interface Credits { monthly: number; extra: number; used: number; total: number; left: number; period: string; resets_on: string; resets_label: string }
 
 export interface CompaniesPushed { results: { name: string; id: string; domain: string }[]; errors: string[]; links: string[] }
 
@@ -245,7 +246,7 @@ export interface Client {
     users: Record<string, string>;
   };
   keys: { openai: string; openai_model: string; apollo: string };
-  credits: { total: number; used: number };
+  credits: { monthly: number; used: number; period: string; extra: number };
   flags: { show_usage: boolean };
   profile: Profile;
 }

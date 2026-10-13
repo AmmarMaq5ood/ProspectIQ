@@ -16,7 +16,9 @@ export default function Admin() {
   const [slugTouched, setSlugTouched] = useState(false);
   const [link, setLink] = useState('');
   const [copied, setCopied] = useState(false);
-  const loadLink = () => api<{ url: string }>('/admin/link').then((r) => setLink(r.url)).catch(() => {});
+  const [support, setSupport] = useState('');
+  const [supportOk, setSupportOk] = useState('');
+  const loadLink = () => api<{ url: string; support_email?: string }>('/admin/link').then((r) => { setLink(r.url); setSupport(r.support_email || ''); }).catch(() => {});
 
   const load = () => api<{ clients: ClientRow[] }>('/admin/clients').then((r) => setRows(r.clients)).catch((e) => setErr(errText(e)));
   useEffect(() => { load(); loadLink(); }, []);
@@ -51,6 +53,15 @@ export default function Admin() {
             </div>
           </>
         ) : <Notice kind="err"><p>The link could not be loaded.</p></Notice>}
+      </section>
+      <section className="card" style={{ marginBottom: 12 }}>
+        <h2>Support email</h2>
+        <p className="sub">Shown to clients when they run out of credits: "To upgrade your plan, email …". Leave blank to say "contact your Launchpad team" instead.</p>
+        <form className="newc" onSubmit={async (e) => { e.preventDefault(); setErr(''); setSupportOk(''); try { const r = await api<{ support_email: string }>('/admin/settings', { method: 'PUT', body: { support_email: support } }); setSupport(r.support_email); setSupportOk('Saved.'); setTimeout(() => setSupportOk(''), 2000); } catch (x) { setErr(errText(x)); } }}>
+          <div><label className="f" htmlFor="se">Email address</label><input type="email" id="se" value={support} onChange={(e) => setSupport(e.target.value)} placeholder="support@launchpadinnovations.ai" autoComplete="off" /></div>
+          <div className="hint" style={{ alignSelf: 'end', paddingBottom: 10 }}>{supportOk}</div>
+          <button className="btn secondary" type="submit"><Icon name="check" />Save</button>
+        </form>
       </section>
       <section className="card" style={{ marginBottom: 12 }}>
         <h2>New client</h2>

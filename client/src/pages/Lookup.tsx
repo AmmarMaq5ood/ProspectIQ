@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { api, cap, errText, fullName, hq, nf } from '../api';
+import { api, cap, errText, fullName, hq, nf, outOfCredits } from '../api';
 import { useApp } from '../App';
 import { useBusy } from '../components/Busy';
 import { Chips } from '../components/Chips';
@@ -178,10 +178,10 @@ export default function Lookup() {
           </section>
 
           <div className="pushbar">
-            <span className="cnt"><b>{nSel}</b> contacts ticked · uses up to <b>{nEmail}</b> of your <b>{nf(left)}</b> credits · creates the company, the contacts, the note and the outreach deal</span>
+            <span className="cnt"><b>{nSel}</b> contacts ticked · uses up to <b>{nEmail}</b> of your <b>{nf(left)}</b> credits this month · creates the company, the contacts, the note and the outreach deal</span>
             {me.sample && <span className="hint">Sample mode: pushing is off.</span>}
-            {!me.sample && left <= 0 && <span className="warn">No credits left: ask your Launchpad team to top up.</span>}
-            {!me.sample && left > 0 && nEmail > left && <span className="warn">Only {nf(left)} credits left: untick {nEmail - left}.</span>}
+            {left <= 0 && <span className="warn">{outOfCredits(c)}</span>}
+            {!me.sample && left > 0 && nEmail > left && <span className="warn">Only {nf(left)} credits left this month: untick {nEmail - left}.</span>}
             <button className="btn" type="button" onClick={push} disabled={me.sample || nSel === 0 || blocked}><Icon name="push" />Push to Launchpad</button>
           </div>
         </>

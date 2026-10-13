@@ -32,20 +32,20 @@ export function Num({ value, format }: { value: number; format?: (n: number) => 
 }
 
 /** The credits pill: a ring that empties as credits are used, the number counting to the current balance. */
-export function CreditsRing({ total, used, left, big }: { total: number; used: number; left: number; big?: boolean }) {
+export function CreditsRing({ total, used, left, big, resets }: { total: number; used: number; left: number; big?: boolean; resets?: string }) {
   const pct = total > 0 ? Math.max(0, Math.min(1, left / total)) : 0;
   const r = 15;
   const C = 2 * Math.PI * r;
   const v = useCountUp(left);
   const state = left <= 0 ? ' out' : pct < 0.15 ? ' low' : '';
   return (
-    <span className={`credits${state}${big ? ' big' : ''}`} title={`${used.toLocaleString('en-US')} used of ${total.toLocaleString('en-US')}`} role="status">
+    <span className={`credits${state}${big ? ' big' : ''}`} title={`${used.toLocaleString('en-US')} used of ${total.toLocaleString('en-US')} this month${resets ? `, resets on ${resets}` : ''}`} role="status">
       <svg viewBox="0 0 36 36" className="ring" aria-hidden="true">
         <circle className="bg" cx="18" cy="18" r={r} />
         <circle className="fg" cx="18" cy="18" r={r} style={{ strokeDasharray: C, strokeDashoffset: C * (1 - pct) }} />
       </svg>
       <b>{v.toLocaleString('en-US')}</b>
-      <span>{left === 1 ? 'credit left' : 'credits left'}</span>
+      <span>{left === 1 ? 'credit left' : 'credits left'}{big && resets ? <><br /><small>of {total.toLocaleString('en-US')} · resets {resets}</small></> : null}</span>
     </span>
   );
 }

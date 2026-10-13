@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { api, errText } from '../api';
+import { api, errText, setKey } from '../api';
 import { useApp } from '../App';
 import { Icon } from '../components/Icon';
 
@@ -24,7 +24,8 @@ export default function Login() {
     setErr('');
     setBusy(true);
     try {
-      await api(path, { body });
+      const r = await api<{ key?: string }>(path, { body });
+      if (r.key) setKey(r.key);
       await reload();
       nav(to, { replace: true });
     } catch (x) {

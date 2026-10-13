@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { api, cap, errText, fullName, hq, money, nf, peopleAtHref } from '../api';
+import { api, cap, errText, fullName, hq, money, nf, outOfCredits, peopleAtHref } from '../api';
 import { useApp } from '../App';
 import { useBusy } from '../components/Busy';
 import { Chips } from '../components/Chips';
@@ -161,10 +161,10 @@ export default function Research({ mode }: { mode: Mode }) {
                 <Pager res={res} onPage={(p) => search(filters, { page: String(p), pp: String(pp) })} />
               </div>
               <div className="pushbar">
-                <span className="cnt"><b>{nSel}</b> selected{people ? <> · uses up to <b>{nEmail}</b> of your <b>{nf(left)}</b> credits · creates the company, the contacts with roles, a research note and the outreach deal</> : ' · creates a company record for each'}</span>
+                <span className="cnt"><b>{nSel}</b> selected{people ? <> · uses up to <b>{nEmail}</b> of your <b>{nf(left)}</b> credits this month · creates the company, the contacts with roles, a research note and the outreach deal</> : ' · creates a company record for each'}</span>
                 {me.sample && <span className="hint">Sample mode: pushing is off.</span>}
-                {!me.sample && people && left <= 0 && <span className="warn">No credits left: ask your Launchpad team to top up.</span>}
-                {!me.sample && people && left > 0 && nEmail > left && <span className="warn">Only {nf(left)} credits left: untick {nEmail - left}.</span>}
+                {people && left <= 0 && <span className="warn">{outOfCredits(c)}</span>}
+                {!me.sample && people && left > 0 && nEmail > left && <span className="warn">Only {nf(left)} credits left this month: untick {nEmail - left}.</span>}
                 <button className="btn" type="button" onClick={push} disabled={me.sample || nSel === 0 || blocked}><Icon name="push" />Push to Launchpad</button>
               </div>
             </>

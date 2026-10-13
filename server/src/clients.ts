@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import { config } from './config.js';
 import { clientDir, readJson, writeJson, ensureDir } from './store.js';
 import type { Client, Profile } from './types.js';
+import { creditsView, rollover } from './credits.js';
 import fs from 'node:fs';
 
 const INDEX = () => path.join(config.dataDir, 'clients.json');
@@ -66,13 +67,17 @@ export function getClient(slug: string): Client | null {
   if (!/^[a-z0-9-]{2,40}$/.test(slug)) return null;
   const file = path.join(config.dataDir, 'clients', slug, 'client.json');
   const c = readJson<Client | null>(file, null);
-  return c ? normalize(c) : null;
+  if (!c) return null;
+  normalize(c);
+  rollover(c);
+  return c;
 }
 
 /** Records written by older versions get the newer fields. */
 function normalize(c: Client): Client {
   const raw = c as Client & { limits?: unknown };
-  if (!c.credits || typeof c.credits.total !== 'number') c.credits = { total: 1000, used: 0 };
+  const old = c.credits as unknown as { total?: number; monthly?: number; used?: number; period?: string; extra?: number } | undefined;
+  if (!old || typeof old.monthly !== 'number') c.credits = { monthly: typeof old?.total === 'number' ? old.total : 1000, used: old?.used || 0, period: '', extra: 0 };
   if (!c.flags) c.flags = { show_usage: false };
   delete raw.limits;
   return c;
@@ -89,7 +94,7 @@ export function getClientByLocation(locationId: string): Client | null {
 
 const SETTINGS = () => path.join(config.dataDir, 'settings.json');
 
-export interface AgencySettings { link_secret: string }
+export interface AgencySettings { link_secret: string; support_email: string }
 
 export function agencySettings(): AgencySettings {
   const s = readJson<Partial<AgencySettings>>(SETTINGS(), {});
@@ -97,7 +102,14 @@ export function agencySettings(): AgencySettings {
     s.link_secret = newKey();
     writeJson(SETTINGS(), s);
   }
+  if (typeof s.support_email !== 'string') s.support_email = '';
   return s as AgencySettings;
+}
+
+export function saveAgencySettings(patch: Partial<AgencySettings>): AgencySettings {
+  const s = { ...agencySettings(), ...patch };
+  writeJson(SETTINGS(), s);
+  return s;
 }
 
 export function rotateLinkSecret(): AgencySettings {
@@ -149,7 +161,7 @@ export function createClient(input: { slug: string; name: string; profile?: Part
     created: Date.now(),
     launchpad: { location_id: '', token: '', app_url: config.launchpadApp, pipeline: 'Business Development', quote_stage: 'Quoted', owner: '', timezone: 'America/New_York', users: {} },
     keys: { openai: '', openai_model: '', apollo: '' },
-    credits: { total: 1000, used: 0 },
+    credits: { monthly: 1000, used: 0, period: '', extra: 0 },
     flags: { show_usage: false },
     profile: { ...blankProfile(input.name.trim()), ...(input.profile || {}) },
   };
@@ -179,8 +191,9 @@ export function publicClient(client: Client) {
     has_openai: !!keys.openai,
     has_apollo: !!keys.apollo,
     has_launchpad: !!(client.launchpad.token && client.launchpad.location_id),
-    credits: { total: client.credits.total, used: client.credits.used, left: Math.max(0, client.credits.total - client.credits.used) },
+    credits: creditsView(client),
     show_usage: !!client.flags.show_usage,
+    support_email: agencySettings().support_email || '',
   };
 }
 

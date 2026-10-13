@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ago, api, cap, errText, fullName, hq, hue, initials, money, nf, peopleAtHref, todayIn } from '../api';
+import { ago, api, cap, errText, fullName, hq, hue, initials, money, nf, outOfCredits, peopleAtHref, todayIn } from '../api';
 import { useApp } from '../App';
 import { useBusy } from '../components/Busy';
 import { FindersList } from '../components/FindersList';
@@ -42,7 +42,7 @@ export default function Ask() {
     setText(q); setPushed(null); setNotice([]); setErr(''); setPicks(new Set()); setRoles({});
     if (!q) {
       setRes(null);
-      api<{ recent: RecentSearch[] }>('/recent').then((r) => setRecent(r.recent)).catch(() => {});
+      api<{ recent: RecentSearch[] }>('/recent').then((r) => setRecent(r.recent)).catch((e) => setErr(`Could not load recent searches: ${errText(e)}`));
       return;
     }
     let live = true;
@@ -252,10 +252,10 @@ export default function Ask() {
           </div>
           {rows.length > 0 && (
             <div className="pushbar">
-              <span className="cnt"><b>{nSel}</b> selected{isPeople ? <> · uses up to <b>{nEmail}</b> of your <b>{nf(left)}</b> credits · creates the company, the contacts with roles, a research note and the outreach deal</> : ' · creates a company record for each'}</span>
+              <span className="cnt"><b>{nSel}</b> selected{isPeople ? <> · uses up to <b>{nEmail}</b> of your <b>{nf(left)}</b> credits this month · creates the company, the contacts with roles, a research note and the outreach deal</> : ' · creates a company record for each'}</span>
               {me.sample && <span className="hint">Sample mode: pushing is off.</span>}
-              {!me.sample && isPeople && left <= 0 && <span className="warn">No credits left: ask your Launchpad team to top up.</span>}
-              {!me.sample && isPeople && left > 0 && nEmail > left && <span className="warn">Only {nf(left)} credits left: untick {nEmail - left}.</span>}
+              {isPeople && left <= 0 && <span className="warn">{outOfCredits(c)}</span>}
+              {!me.sample && isPeople && left > 0 && nEmail > left && <span className="warn">Only {nf(left)} credits left this month: untick {nEmail - left}.</span>}
               <button className="btn" type="button" onClick={push} disabled={me.sample || nSel === 0 || blocked}><Icon name="push" />Push to Launchpad</button>
             </div>
           )}

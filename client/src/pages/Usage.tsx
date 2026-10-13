@@ -59,16 +59,16 @@ export default function Usage({ adminSlug, timezone }: { adminSlug?: string; tim
         <div className="kpi"><div className="l">GPT tokens</div><div className="v"><Num value={t.tokens_in + t.tokens_out} format={fmtN} /></div><div className="n">{fmtN(t.tokens_in)} in · {fmtN(t.tokens_out)} out</div></div>
         {showCost
           ? <div className="kpi"><div className="l">GPT cost</div><div className="v">{t.gpt_calls ? usd(t.cost) : '—'}</div><div className="n">{t.cost_known ? 'from the model prices on the server' : 'some models have no price set'}{t.apollo_errors + t.gpt_errors > 0 && <> · <span className="od">{nf(t.apollo_errors + t.gpt_errors)} failed calls</span></>}</div></div>
-          : <div className="kpi"><div className="l">Credits left</div><div className="v"><Num value={credits?.left ?? 0} /></div><div className="n">{nf(credits?.used ?? 0)} used of {nf(credits?.total ?? 0)}</div></div>}
+          : <div className="kpi"><div className="l">Credits left</div><div className="v"><Num value={credits?.left ?? 0} /></div><div className="n">{nf(credits?.used ?? 0)} used of {nf(credits?.total ?? 0)} · resets {credits?.resets_label ?? ''}</div></div>}
       </section>
 
       {!showCost && credits && (
         <section className="grid one" aria-label="Credits">
           <div className="card">
             <h2>Credits</h2>
-            <p className="sub">Searching is free. One credit is used for each lead added to Launchpad as a new contact with a work email.</p>
+            <p className="sub">Searching is free. One credit is used for each lead added to Launchpad as a new contact with a work email. Your {nf(credits.monthly)} monthly credits reset on {credits.resets_label}.</p>
             <div className="credits-card">
-              <CreditsRing big total={credits.total} used={credits.used} left={credits.left} />
+              <CreditsRing big total={credits.total} used={credits.used} left={credits.left} resets={credits.resets_label} />
               {data.ledger && data.ledger.length > 0 && (
                 <div className="scroll" style={{ flex: 1, minWidth: 280 }}>
                   <table className="ledger" style={{ minWidth: 0 }}>
