@@ -11,7 +11,7 @@ import { creditCheck, creditsLeft, currentPeriod, resetDate } from './credits.js
 import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.js';
-import { logActivity, readActivity } from './activity.js';
+import { logActivity, readActivity, readActivityAll } from './activity.js';
 import { autoPushState, dayKeyIn } from './autopush.js';
 import { costReport, featureOf, lastMonths, monthKey } from './costs.js';
 import type { Client, Finder, UsageRow } from './types.js';
@@ -137,6 +137,15 @@ ok('activity filters', readActivity('test', { kind: 'push' }).total === 3 && rea
   ok('costs: models', rep.models.find((m) => m.model === 'mystery')!.known === false && rep.models.find((m) => m.model === 'gpt-6-luna')!.calls === 2);
   const unpriced = costReport([{ slug: 'a', name: 'A', timezone: 'UTC', rows: rows('a') }], { months: 2, now });
   ok('costs: no credit price means counts only', unpriced.credit_cost === 0 && unpriced.totals.research === 0 && unpriced.totals.credits === 2);
+}
+
+/* ---- the admin feed across clients ---- */
+{
+  fs.rmSync(path.join(config.dataDir, 'clients', 'test2', 'activity.jsonl'), { force: true });
+  for (let k = 0; k < 3; k++) logActivity('test2', { kind: 'search', title: `other ${k}`, by: 'client', ok: true, items: [{ name: 'x' }] });
+  const feed = readActivityAll([{ slug: 'test', name: 'Test' }, { slug: 'test2', name: 'Other' }], { page: 1, per: 5 });
+  ok('admin feed: merged newest first, paged, items dropped', feed.total === 10 && feed.pages === 2 && feed.rows.length === 5 && feed.rows[0].client === 'Other' && feed.rows[0].title === 'other 2' && !('items' in feed.rows[0]));
+  ok('admin feed: kind filter', readActivityAll([{ slug: 'test', name: 'Test' }, { slug: 'test2', name: 'Other' }], { kind: 'push' }).total === 3);
 }
 
 console.log(process.exitCode ? `FAILURES in ${n} checks` : `all ${n} checks pass`);

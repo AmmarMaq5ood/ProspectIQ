@@ -286,5 +286,7 @@ export interface CostReport {
 export interface Overview {
   totals: { clients: number; connected: number; finders: number; credits_total: number; credits_used: number; credits_left: number; clients_out: number; pushed_month: number; searches_month: number; finder_runs_today: number };
   clients: { slug: string; name: string; enabled: boolean; connected: boolean; credits: Credits; finders: number; last: Activity | null }[];
-  recent: (Activity & { client: string; slug: string })[];
 }
+
+export type AdminActivity = Omit<Activity, 'items'> & { client: string; slug: string };
+export interface AdminActivityPage { rows: AdminActivity[]; total: number; page: number; pages: number; per: number }

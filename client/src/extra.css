@@ -263,3 +263,8 @@ html[data-admin-theme="dark"] .admin-app .ctrend-seg.research, html[data-admin-t
 html[data-admin-theme="dark"] .admin-app .ctrend-col.on .ctrend-seg.research { background: #b45309; }
 .xscroll { overflow-x: auto; }
 .xscroll table { min-width: 520px; }
+
+/* ---- overview feed: filters on the left, client + page size on the right ---- */
+.feed-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; margin: 0 0 10px; }
+.feed-tools-r { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: 13px; color: var(--text-3); }
+.feed-tools-r select.in { width: auto; height: 32px; padding: 0 28px 0 10px; font-size: 13px; }

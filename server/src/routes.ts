@@ -8,7 +8,7 @@ import { adminView, agencyKeyStates } from './clients.js';
 import { costReport, usageReadSince } from './costs.js';
 import type { AgencySettings } from './clients.js';
 import { annotateInLaunchpad, markPushed } from './lpindex.js';
-import { logActivity, readActivity } from './activity.js';
+import { logActivity, readActivity, readActivityAll } from './activity.js';
 import { DEPARTMENTS, EMAIL_STATUS, EMPLOYEE_RANGES, FUNDING, PER_PAGE, SENIORITY, enrichPerson, orgByDomain, planLimits, searchCompanies, searchPeople, type ApolloCtx } from './apollo.js';
 import { cleanFilters, cleanIntent, filtersActive, intentFilters, normDomain } from './rules.js';
 import { askIntent, draftProfile, fitLines, siteText, type LlmCtx } from './llm.js';
@@ -427,7 +427,6 @@ admin.get('/overview', (_req, res) => {
     const acts = readActivity(c.slug, { per: 100 }).rows;
     return { slug: c.slug, name: c.name, enabled: c.enabled, connected: lpReady(lpOf(c)), credits: creditsView(c), finders: listFinders(c.slug).length, last: acts[0] || null, acts };
   });
-  const recent = rows.flatMap((r) => r.acts.map((a) => ({ ...a, items: undefined, client: r.name, slug: r.slug }))).sort((a, b) => b.t - a.t).slice(0, 20);
   const all = rows.flatMap((r) => r.acts);
   const totals = {
     clients: rows.length,
@@ -441,7 +440,14 @@ admin.get('/overview', (_req, res) => {
     searches_month: all.filter((a) => a.kind === 'search' && a.t >= monthStart).length,
     finder_runs_today: all.filter((a) => a.kind === 'finder' && a.t >= dayStart).length,
   };
-  res.json({ totals, clients: rows.map(({ acts: _a, ...r }) => r), recent });
+  res.json({ totals, clients: rows.map(({ acts: _a, ...r }) => r) });
+});
+
+/* ---- the overview feed: every client's activity, newest first, in pages ---- */
+admin.get('/activity', (req, res) => {
+  const slug = String(req.query.client || '');
+  const clients = listClients().filter((c) => !slug || c.slug === slug).map((c) => ({ slug: c.slug, name: c.name }));
+  res.json(readActivityAll(clients, { page: Number(req.query.page), per: Number(req.query.per), kind: String(req.query.kind || '') }));
 });
 
 admin.get('/link', (_req, res) => {

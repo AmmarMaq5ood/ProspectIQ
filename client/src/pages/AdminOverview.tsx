@@ -3,15 +3,25 @@ import { Link, useNavigate } from 'react-router-dom';
 import { api, errText, fmtWhen, nf } from '../api';
 import { Icon } from '../components/Icon';
 import { Num } from '../components/Motion';
-import { Errors } from '../components/ui';
-import type { Overview } from '../types';
+import { Errors, Pager, PerPage } from '../components/ui';
+import type { AdminActivityPage, Overview } from '../types';
+
+const KINDS: [string, string][] = [['', 'Everything'], ['finder', 'Finder runs'], ['push', 'Pushes'], ['search', 'Searches'], ['lookup', 'Lookups'], ['credits', 'Credits']];
+const ICON: Record<string, string> = { finder: 'calendar', push: 'push', search: 'search', lookup: 'link', credits: 'chart', system: 'settings' };
 
 /** The agency's front page: the numbers that matter across every client, and what happened last. */
 export default function AdminOverview() {
   const nav = useNavigate();
   const [d, setD] = useState<Overview | null>(null);
   const [err, setErr] = useState('');
+  const [feed, setFeed] = useState<AdminActivityPage | null>(null);
+  const [page, setPage] = useState(1);
+  const [per, setPer] = useState(10);
+  const [kind, setKind] = useState('');
+  const [who, setWho] = useState('');
   useEffect(() => { api<Overview>('/admin/overview').then(setD).catch((e) => setErr(errText(e))); }, []);
+  useEffect(() => { api<AdminActivityPage>('/admin/activity', { query: { page, per, kind, client: who } }).then(setFeed).catch((e) => setErr(errText(e))); }, [page, per, kind, who]);
+  const pick = (next: { kind?: string; who?: string; per?: number }) => { if (next.kind !== undefined) setKind(next.kind); if (next.who !== undefined) setWho(next.who); if (next.per !== undefined) setPer(next.per); setPage(1); };
   if (err) return <Errors errors={[err]} />;
   if (!d) return <p className="empty">Loading…</p>;
   const t = d.totals;
@@ -53,21 +63,33 @@ export default function AdminOverview() {
         </div>
         <div className="card">
           <h2>Latest activity</h2>
-          <p className="sub">Across every client, newest first.</p>
-          {d.recent.length ? (
-            <ul className="feed compact">
-              {d.recent.map((r, i) => (
-                <li className={`ev ev-${r.kind}${r.ok ? '' : ' failed'}`} key={i}>
-                  <span className="ev-icon"><Icon name={({ finder: 'calendar', push: 'push', search: 'search', lookup: 'link', credits: 'chart', system: 'settings' } as Record<string, string>)[r.kind] || 'clock'} /></span>
-                  <div className="ev-body">
-                    <div className="ev-title"><Link to={`/admin/clients/${r.slug}`}>{r.client}</Link> · {r.title}</div>
-                    {r.detail && <div className="ev-detail">{r.detail}</div>}
-                  </div>
-                  <div className="ev-meta"><div className="ev-when">{fmtWhen(r.t, 'UTC')}</div>{r.credits ? <div className="ev-credits">−{nf(r.credits)}</div> : null}</div>
-                </li>
-              ))}
-            </ul>
-          ) : <p className="empty">Nothing yet.</p>}
+          <p className="sub">Across every client, newest first. Times in UTC.</p>
+          <div className="feed-tools">
+            <div className="sugg" style={{ margin: 0 }}>
+              {KINDS.map(([k, label]) => <button type="button" key={k} className={k === kind ? 'on' : ''} onClick={() => pick({ kind: k })}>{label}</button>)}
+            </div>
+            <div className="feed-tools-r">
+              {d.clients.length > 1 && <select className="in" aria-label="Client" value={who} onChange={(e) => pick({ who: e.target.value })}><option value="">All clients</option>{d.clients.map((c) => <option key={c.slug} value={c.slug}>{c.name}</option>)}</select>}
+              <PerPage value={per} options={[10, 25, 50]} onChange={(n) => pick({ per: n })} />
+            </div>
+          </div>
+          {!feed ? <p className="empty">Loading…</p> : feed.rows.length ? (
+            <>
+              <ul className="feed compact">
+                {feed.rows.map((r, i) => (
+                  <li className={`ev ev-${r.kind}${r.ok ? '' : ' failed'}`} key={`${r.t}-${i}`}>
+                    <span className="ev-icon"><Icon name={ICON[r.kind] || 'clock'} /></span>
+                    <div className="ev-body">
+                      <div className="ev-title"><Link to={`/admin/clients/${r.slug}`}>{r.client}</Link> · {r.title}</div>
+                      {r.detail && <div className="ev-detail">{r.detail}</div>}
+                    </div>
+                    <div className="ev-meta"><div className="ev-when">{fmtWhen(r.t, 'UTC')}</div>{r.credits ? <div className="ev-credits">−{nf(r.credits)}</div> : null}</div>
+                  </li>
+                ))}
+              </ul>
+              <Pager res={{ rows: feed.rows, total: feed.total, page: feed.page, per_page: feed.per, pages: feed.pages }} onPage={setPage} />
+            </>
+          ) : <p className="empty">{kind || who ? 'Nothing of that kind yet.' : 'Nothing yet.'}</p>}
         </div>
       </section>
     </>
