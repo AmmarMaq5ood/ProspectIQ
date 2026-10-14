@@ -13,6 +13,7 @@ import path from 'node:path';
 import { config } from './config.js';
 import { logActivity, readActivity } from './activity.js';
 import { autoPushState, dayKeyIn } from './autopush.js';
+import { costReport, featureOf, lastMonths, monthKey } from './costs.js';
 import type { Client, Finder, UsageRow } from './types.js';
 
 /** Pure checks, no network: the parser, filters, samples, schedule maths, usage, drafting. */
@@ -67,7 +68,7 @@ ok('next run from Sat is Mon 08:30', new Intl.DateTimeFormat('en-US', { timeZone
 ok('describe', describe({ ...fd, start: 0 }, tz) === '5 a day at 08:30, weekdays');
 ok('not twice a day', !isDue({ ...fd, last_run: mon - 60000 }, tz, mon));
 
-const client: Client = { slug: 'test', name: 'Test', access_key: 'k', enabled: true, created: 0, launchpad: { location_id: '', token: '', app_url: '', pipeline: 'Business Development', quote_stage: '', owner: '', timezone: tz, users: {} }, keys: { openai: '', openai_model: '', apollo: '' }, credits: { monthly: 1000, used: 0, period: '2026-10', extra: 0 }, flags: { show_usage: false, show_activity: true }, auto_push: { daily: 50, day: '', used: 0 }, profile: ARTMARK_PROFILE };
+const client: Client = { slug: 'test', name: 'Test', access_key: 'k', enabled: true, created: 0, launchpad: { location_id: '', token: '', app_url: '', pipeline: 'Business Development', quote_stage: '', owner: '', timezone: tz, users: {} }, keys: { openai: '', openai_model: '', apollo: '', treg: '' }, credits: { monthly: 1000, used: 0, period: '2026-10', extra: 0 }, flags: { show_usage: false, show_activity: true }, auto_push: { daily: 50, day: '', used: 0 }, profile: ARTMARK_PROFILE };
 process.env.DATA_DIR = process.env.DATA_DIR || './data-test';
 const run = await runFinder(client, { ...fd, per_run: 4 }, false);
 ok('finder sample run: 4 leads, nothing written', run.ok && run.pushed.length === 4 && /Sample run/.test(run.text) && run.seen.length >= 4);
@@ -112,6 +113,30 @@ ok('activity filters', readActivity('test', { kind: 'push' }).total === 3 && rea
   ok('auto push: old records default to 50', none.daily === 50 && none.left === 50);
   const over = autoPushState({ ...base, auto_push: { daily: 50, day: '2026-10-14', used: 60 } } as Client, noon);
   ok('auto push: never negative', over.left === 0);
+}
+
+/* ---- the cost report ---- */
+{
+  const now = Date.UTC(2026, 9, 15, 12, 0); // 15 Oct 2026
+  const sep = Date.UTC(2026, 8, 20, 12, 0), oct = Date.UTC(2026, 9, 3, 12, 0);
+  const rows = (slug: string): UsageRow[] => [
+    { t: sep, ctx: 'research:ask', p: 'apollo', ok: 1, ms: 10, ep: '/mixed_people/api_search', n: 50 },
+    { t: oct, ctx: 'research:ask', p: 'apollo', ok: 1, ms: 10, ep: '/mixed_people/api_search', n: 50 },
+    { t: oct, ctx: 'finder:Valves', p: 'apollo', ok: 1, ms: 10, ep: '/people/match', credit: 1 },
+    { t: oct, ctx: 'finder:Valves', p: 'apollo', ok: 1, ms: 10, ep: '/people/match', credit: 1 },
+    { t: oct, ctx: 'finder:Valves', p: 'openai', ok: 1, ms: 10, model: 'gpt-6-luna', kind: 'fit', in: 1000, out: 200, cost: 0.0002 },
+    { t: oct, ctx: 'research:lookup', p: 'openai', ok: 1, ms: 10, model: 'mystery', kind: 'fit', in: 10, out: 10, cost: null },
+    { t: oct, ctx: 'research:lookup', p: 'apollo', ok: 0, ms: 10, ep: '/people/match', err: 'boom' },
+  ].map((r) => ({ ...r, ctx: slug === 'b' ? r.ctx.replace('finder:Valves', 'research:people') : r.ctx })) as UsageRow[];
+  ok('costs: month keys and feature names', lastMonths(3, now).join() === '2026-08,2026-09,2026-10' && monthKey(oct, 'America/New_York') === '2026-10' && featureOf('finder:x') === 'Daily finders' && featureOf('research:lookup') === 'Company lookup');
+  const rep = costReport([{ slug: 'a', name: 'A', timezone: 'America/New_York', rows: rows('a') }, { slug: 'b', name: 'B', timezone: 'UTC', rows: rows('b') }], { months: 3, creditCost: 0.5, now });
+  ok('costs: selected month totals', rep.selected === '2026-10' && rep.totals.credits === 4 && rep.totals.research === 2 && Math.abs(rep.totals.gpt - 0.0004) < 1e-9 && rep.totals.searches === 2 && rep.totals.lookups === 4 && rep.totals.errors === 2 && !rep.totals.gpt_known);
+  ok('costs: by month', rep.months.length === 3 && rep.months[1].month === '2026-09' && rep.months[1].searches === 2 && rep.months[1].total === 0 && rep.months[2].credits === 4);
+  ok('costs: by account with shares', rep.clients.length === 2 && rep.clients[0].share === 50 && rep.clients[0].by_feature['Company lookup'].lookups === 0 && rep.totals.clients_active === 2);
+  ok('costs: by feature', rep.features.find((f) => f.feature === 'Daily finders')!.credits === 2 && rep.features.find((f) => f.feature === 'People tab')!.credits === 2 && rep.features.find((f) => f.feature === 'Ask')!.searches === 2);
+  ok('costs: models', rep.models.find((m) => m.model === 'mystery')!.known === false && rep.models.find((m) => m.model === 'gpt-6-luna')!.calls === 2);
+  const unpriced = costReport([{ slug: 'a', name: 'A', timezone: 'UTC', rows: rows('a') }], { months: 2, now });
+  ok('costs: no credit price means counts only', unpriced.credit_cost === 0 && unpriced.totals.research === 0 && unpriced.totals.credits === 2);
 }
 
 console.log(process.exitCode ? `FAILURES in ${n} checks` : `all ${n} checks pass`);

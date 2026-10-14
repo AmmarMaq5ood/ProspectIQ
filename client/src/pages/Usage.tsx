@@ -170,20 +170,21 @@ export default function Usage({ adminSlug, timezone }: { adminSlug?: string; tim
   );
 }
 
-export function Bars({ rows, cls, empty = 'Nothing in this period yet.', dimZero }: { rows: [string, number][]; cls: string; empty?: string; dimZero?: boolean }) {
+export function Bars({ rows, cls, empty = 'Nothing in this period yet.', dimZero, format }: { rows: [string, number][]; cls: string; empty?: string; dimZero?: boolean; format?: (n: number) => string }) {
   if (!rows.length) return <p className="empty">{empty}</p>;
-  const max = Math.max(1, ...rows.map((r) => r[1]));
+  const fmt = format || fmtN;
+  const max = Math.max(format ? 0.0001 : 1, ...rows.map((r) => r[1]));
   return (
     <>
       <div className="bars">
         {rows.map(([label, value]) => (
           <div className={`row static${dimZero && value <= 0 ? ' zero' : ''}`} key={label} aria-label={`${label}: ${value}`}>
             <span className="lbl">{label}</span>
-            <span className="track"><span className={`bar ${cls}`} style={{ width: `${Math.max(2, Math.round((value / max) * 100))}%` }} /><span className="val">{fmtN(value)}</span></span>
+            <span className="track"><span className={`bar ${cls}`} style={{ width: `${Math.max(2, Math.round((value / max) * 100))}%` }} /><span className="val">{fmt(value)}</span></span>
           </div>
         ))}
       </div>
-      <details className="tbl"><summary>Table</summary><table><thead><tr><th scope="col">Category</th><th scope="col" className="num">Count</th></tr></thead><tbody>{rows.map(([l, v]) => <tr key={l}><td>{l}</td><td className="num">{nf(v)}</td></tr>)}</tbody></table></details>
+      <details className="tbl"><summary>Table</summary><table><thead><tr><th scope="col">Category</th><th scope="col" className="num">Count</th></tr></thead><tbody>{rows.map(([l, v]) => <tr key={l}><td>{l}</td><td className="num">{format ? format(v) : nf(v)}</td></tr>)}</tbody></table></details>
     </>
   );
 }

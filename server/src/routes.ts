@@ -4,6 +4,9 @@ import { config } from './config.js';
 import { createClient, deleteClient, effectiveKeys, getClient, getClientByKey, getClientByLocation, listClients, newKey, publicClient, rotateLinkSecret, saveClient, saveAgencySettings, agencySettings, universalLink } from './clients.js';
 import { addCredits, creditCheck, creditLedger, creditsLeft, creditsView, restoreFull, setMonthly, spendCredits } from './credits.js';
 import { autoPushState } from './autopush.js';
+import { adminView, agencyKeyStates } from './clients.js';
+import { costReport, usageReadSince } from './costs.js';
+import type { AgencySettings } from './clients.js';
 import { annotateInLaunchpad, markPushed } from './lpindex.js';
 import { logActivity, readActivity } from './activity.js';
 import { DEPARTMENTS, EMAIL_STATUS, EMPLOYEE_RANGES, FUNDING, PER_PAGE, SENIORITY, enrichPerson, orgByDomain, planLimits, searchCompanies, searchPeople, type ApolloCtx } from './apollo.js';
@@ -355,7 +358,7 @@ admin.post('/clients', (req, res) => {
 admin.get('/clients/:slug', (req, res) => {
   const c = getClient(String(req.params.slug));
   if (!c) return res.status(404).json({ error: 'No such client.' });
-  res.json({ client: c, links: menuLinks(c), finders: listFinders(c.slug).map((f) => finderView(f, c.launchpad.timezone)) });
+  res.json({ client: adminView(c), links: menuLinks(c), finders: listFinders(c.slug).map((f) => finderView(f, c.launchpad.timezone)) });
 });
 
 admin.put('/clients/:slug', (req, res) => {
@@ -364,8 +367,19 @@ admin.put('/clients/:slug', (req, res) => {
   const b = req.body || {};
   if (typeof b.name === 'string') c.name = b.name.trim().slice(0, 80) || c.name;
   if (typeof b.enabled === 'boolean') c.enabled = b.enabled;
-  if (b.launchpad && typeof b.launchpad === 'object') for (const k of ['location_id', 'token', 'app_url', 'pipeline', 'quote_stage', 'owner', 'timezone'] as const) if (typeof b.launchpad[k] === 'string') c.launchpad[k] = b.launchpad[k].trim();
-  if (b.keys && typeof b.keys === 'object') for (const k of ['openai', 'openai_model', 'apollo'] as const) if (typeof b.keys[k] === 'string') c.keys[k] = b.keys[k].trim();
+  // Secrets: a blank keeps what is stored, null clears it, anything else replaces it.
+  if (b.launchpad && typeof b.launchpad === 'object') {
+    for (const k of ['location_id', 'app_url', 'pipeline', 'quote_stage', 'owner', 'timezone'] as const) if (typeof b.launchpad[k] === 'string') c.launchpad[k] = b.launchpad[k].trim();
+    if (b.launchpad.token === null) c.launchpad.token = '';
+    else if (typeof b.launchpad.token === 'string' && b.launchpad.token.trim()) c.launchpad.token = b.launchpad.token.trim();
+  }
+  if (b.keys && typeof b.keys === 'object') {
+    if (typeof b.keys.openai_model === 'string') c.keys.openai_model = b.keys.openai_model.trim();
+    for (const k of ['openai', 'apollo', 'treg'] as const) {
+      if (b.keys[k] === null) c.keys[k] = '';
+      else if (typeof b.keys[k] === 'string' && b.keys[k].trim()) c.keys[k] = b.keys[k].trim();
+    }
+  }
   if (b.flags && typeof b.flags === 'object') {
     if (typeof b.flags.show_usage === 'boolean') c.flags.show_usage = b.flags.show_usage;
     if (typeof b.flags.show_activity === 'boolean') c.flags.show_activity = b.flags.show_activity;
@@ -377,7 +391,7 @@ admin.put('/clients/:slug', (req, res) => {
   }
   if (b.profile && typeof b.profile === 'object') c.profile = cleanProfile({ ...c.profile, ...b.profile });
   saveClient(c);
-  res.json({ client: c, links: menuLinks(c) });
+  res.json({ client: adminView(c), links: menuLinks(c) });
 });
 
 admin.get('/clients/:slug/activity', (req, res) => {
@@ -432,14 +446,40 @@ admin.get('/overview', (_req, res) => {
 
 admin.get('/link', (_req, res) => {
   const s = agencySettings();
-  res.json({ url: universalLink(), secret_set: !!s.link_secret, support_email: s.support_email });
+  res.json({ url: universalLink(), secret_set: !!s.link_secret, support_email: s.support_email, credit_cost: s.credit_cost, keys: agencyKeyStates() });
 });
 
 admin.put('/settings', (req, res) => {
-  const email = String(req.body?.support_email ?? '').trim().slice(0, 120);
-  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'That does not look like an email address.' });
-  const s = saveAgencySettings({ support_email: email });
-  res.json({ support_email: s.support_email });
+  const patch: Partial<AgencySettings> = {};
+  if (req.body?.support_email !== undefined) {
+    const email = String(req.body.support_email ?? '').trim().slice(0, 120);
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'That does not look like an email address.' });
+    patch.support_email = email;
+  }
+  if (req.body?.credit_cost !== undefined) {
+    const cost = Number(req.body.credit_cost);
+    if (!Number.isFinite(cost) || cost < 0 || cost > 100) return res.status(400).json({ error: 'The credit cost must be a number of dollars, 0 or more.' });
+    patch.credit_cost = Math.round(cost * 10000) / 10000;
+  }
+  if (req.body?.keys && typeof req.body.keys === 'object') {
+    const keys = { ...agencySettings().keys };
+    for (const k of ['openai', 'apollo', 'treg'] as const) {
+      const v = req.body.keys[k];
+      if (v === null) keys[k] = '';
+      else if (typeof v === 'string' && v.trim()) keys[k] = v.trim();
+    }
+    patch.keys = keys;
+  }
+  const s = saveAgencySettings(patch);
+  res.json({ support_email: s.support_email, credit_cost: s.credit_cost, keys: agencyKeyStates() });
+});
+
+/* ---- the cost report: every client's spend, by month, account, feature, model and day ---- */
+admin.get('/costs', (req, res) => {
+  const months = Math.max(1, Math.min(24, Number(req.query.months) || 12));
+  const since = Date.now() - (months + 1) * 31 * 86400000;
+  const clients = listClients().map((c) => ({ slug: c.slug, name: c.name, timezone: c.launchpad.timezone || 'UTC', rows: usageReadSince(c.slug, since) }));
+  res.json(costReport(clients, { months, selected: String(req.query.month || ''), creditCost: agencySettings().credit_cost }));
 });
 
 admin.post('/link/rotate', (_req, res) => {
@@ -452,7 +492,7 @@ admin.post('/clients/:slug/rotate-key', (req, res) => {
   if (!c) return res.status(404).json({ error: 'No such client.' });
   c.access_key = newKey();
   saveClient(c);
-  res.json({ client: c, links: menuLinks(c) });
+  res.json({ client: adminView(c), links: menuLinks(c) });
 });
 
 admin.delete('/clients/:slug', (req, res) => {
@@ -464,7 +504,8 @@ admin.post('/clients/:slug/test', wrap(async (req, res) => {
   const c = getClient(String(req.params.slug));
   if (!c) return res.status(404).json({ error: 'No such client.' });
   const lp = lpOf(c);
-  const result = await testConnection({ ...lp, ...(req.body?.launchpad || {}) });
+  const given = Object.fromEntries(Object.entries((req.body?.launchpad || {}) as Record<string, unknown>).filter(([, v]) => typeof v === 'string' && v.trim() !== ''));
+  const result = await testConnection({ ...lp, ...given });
   res.json(result);
 }));
 

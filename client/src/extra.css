@@ -226,3 +226,40 @@ html[data-admin-theme="dark"] .admin-app .status, html[data-admin-theme="dark"] 
 html[data-admin-theme="dark"] .admin-app .ask-kicker.dark { color: #93b4ff; background: var(--primary-soft); border-color: var(--primary-line); }
 html[data-admin-theme="dark"] .admin-app .bars .lbl { color: var(--text-3); }
 html[data-admin-theme="dark"] .admin-app .topprog::before { background: linear-gradient(90deg, #6b98ff, #a78bfa, #6b98ff); }
+
+/* ---- admin cost report: the monthly stacked columns and the share bars ---- */
+.ctrend { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 6px; align-items: end; height: 180px; margin: 6px 0 10px; padding: 0 2px; }
+.ctrend-col { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-end; height: 100%; padding: 0; font: inherit; color: inherit; background: transparent; border: 0; border-radius: 6px; cursor: pointer; transition: background 0.15s ease; }
+.ctrend-col:hover { background: var(--surface-2); }
+.ctrend-col.on .ctrend-lbl { color: var(--text); font-weight: 600; }
+.ctrend-col:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.ctrend-val { height: 18px; font-size: 11.5px; font-weight: 600; color: var(--text-2); text-align: center; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ctrend-stack { display: flex; flex-direction: column; justify-content: flex-end; flex: 1 1 auto; min-height: 0; margin: 0 14%; border-bottom: 1px solid var(--border-2); }
+.ctrend-seg { display: block; width: 100%; min-height: 0; transform-origin: bottom; animation: am-grow-y 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.ctrend-seg.gpt { background: #3b82f6; border-radius: 4px 4px 0 0; }
+.ctrend-seg.research { background: #f59e0b; margin-top: 2px; }
+.ctrend-col.on .ctrend-seg.gpt { background: #155eef; }
+.ctrend-col.on .ctrend-seg.research { background: #d97706; }
+.ctrend-lbl { margin-top: 6px; font-size: 11.5px; color: var(--muted); text-align: center; white-space: nowrap; }
+@keyframes am-grow-y { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+.sharebar { display: inline-block; vertical-align: middle; width: 70px; height: 8px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); overflow: hidden; }
+.sharebar span { display: block; height: 100%; background: #3b82f6; border-radius: 999px; }
+@media (max-width: 900px) { .ctrend { grid-template-columns: repeat(6, minmax(0, 1fr)); height: auto; grid-auto-rows: 150px; } }
+@media (prefers-reduced-motion: reduce) { .ctrend-seg { animation: none; } }
+html[data-admin-theme="dark"] .admin-app .ctrend-stack { border-bottom-color: var(--border-2); }
+
+/* ---- admin settings: API key rows ---- */
+.keyrows { display: grid; gap: 12px; }
+.keyrow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 10px 20px; align-items: center; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--r); background: var(--surface-2); }
+.keyrow .nm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-weight: 600; color: var(--text); }
+.keyrow .st { margin-top: 3px; font-size: 12.5px; color: var(--muted); }
+.keyrow .search-row input { height: 38px; font-size: 14px; }
+.keyrow .search-row .btn { height: 38px; }
+.keyrow .search-row .btn.ghost.sm { height: 38px; }
+@media (max-width: 900px) { .keyrow { grid-template-columns: minmax(0, 1fr); } }
+.legend i.sw-gpt { background: #3b82f6; }
+.legend i.sw-research { background: #f59e0b; }
+html[data-admin-theme="dark"] .admin-app .ctrend-seg.research, html[data-admin-theme="dark"] .admin-app .legend i.sw-research { background: #d97706; }
+html[data-admin-theme="dark"] .admin-app .ctrend-col.on .ctrend-seg.research { background: #b45309; }
+.xscroll { overflow-x: auto; }
+.xscroll table { min-width: 520px; }

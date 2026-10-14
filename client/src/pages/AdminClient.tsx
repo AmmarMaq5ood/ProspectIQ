@@ -9,7 +9,7 @@ import { CreditsRing, Num, Switch } from '../components/Motion';
 import { fmtWhen, nf } from '../api';
 import Usage from './Usage';
 import Activity from './Activity';
-import type { Angle, Client, CreditEntry, Credits, FinderView, MenuLink, Profile, AutoPush } from '../types';
+import type { Angle, Client, CreditEntry, Credits, FinderView, MenuLink, Profile, AutoPush, SecretState } from '../types';
 
 type Tab = 'launchpad' | 'profile' | 'templates' | 'credits' | 'keys' | 'access' | 'finders' | 'activity' | 'usage';
 const TABS: [Tab, string, string][] = [['launchpad', 'Launchpad connection', 'link'], ['profile', 'Profile', 'building'], ['templates', 'Templates', 'list'], ['credits', 'Credits & visibility', 'chart'], ['keys', 'Keys', 'key'], ['access', 'Access & links', 'external'], ['finders', 'Finders', 'calendar'], ['activity', 'Activity', 'clock'], ['usage', 'Usage', 'chart']];
@@ -51,7 +51,7 @@ export default function AdminClient() {
         <Link className="btn ghost sm" to="/admin/clients"><Icon name="chevron" />Clients</Link>
         <h1>{data.client.name} <span className="status">{c.slug}</span></h1>
         <span className="head-pills">
-          {data.client.launchpad.token && data.client.launchpad.location_id ? <span className="pill good">Launchpad connected</span> : <span className="pill bad">not connected</span>}
+          {data.client.secrets?.token.set && data.client.launchpad.location_id ? <span className="pill good">Launchpad connected</span> : <span className="pill bad">not connected</span>}
           <span className="pill">{nf(Math.max(0, c.credits.monthly + c.credits.extra - c.credits.used))} credits left</span>
           {!c.enabled && <span className="pill bad">disabled</span>}
         </span>
@@ -76,7 +76,7 @@ export default function AdminClient() {
       }} />}
       {tab === 'templates' && <TemplatesTab c={c} set={set} onSave={() => save({ profile: c.profile }, 'Templates')} />}
       {tab === 'credits' && <CreditsTab c={c} slug={slug} onToggleUsage={(v) => { set((x) => { x.flags.show_usage = v; }); save({ flags: { show_usage: v } }, 'Visibility'); }} onToggleActivity={(v) => { set((x) => { x.flags.show_activity = v; }); save({ flags: { show_activity: v } }, 'Visibility'); }} />}
-      {tab === 'keys' && <KeysTab c={c} set={set} onSave={() => save({ keys: c.keys }, 'Keys')} />}
+      {tab === 'keys' && <KeysTab c={c} set={set} onSave={() => save({ keys: c.keys }, 'Keys')} onClear={(k) => { if (confirm('Remove this client\'s own key? The agency key takes over.')) save({ keys: { [k]: null } }, 'Keys'); }} />}
       {tab === 'access' && <AccessTab c={c} links={data.links} set={set} onSave={() => save({ enabled: c.enabled, name: c.name }, 'Access')} onRotate={async () => {
         if (!confirm('Rotate the access key? The old menu links stop working until you update them in Launchpad.')) return;
         try { const r = await api<{ client: Client; links: MenuLink[] }>(`/admin/clients/${encodeURIComponent(slug)}/rotate-key`, { body: {} }); setData((d) => (d ? { ...d, client: r.client, links: r.links } : d)); setC(structuredClone(r.client)); setOk('New access key issued.'); } catch (e) { setErr(errText(e)); }
@@ -110,6 +110,13 @@ function SaveBar({ hint, label, onSave, children }: { hint: string; label: strin
   return <div className="savebar"><span className="hint">{hint}</span>{children}<button className="btn" type="button" onClick={onSave}><Icon name="check" />{label}</button></div>;
 }
 
+/** The state of a stored secret, in words: where the key in use comes from and its last four characters. */
+function KeyState({ s, own }: { s?: SecretState; own?: boolean }) {
+  if (!s || !s.set) return <span className="pill">not set</span>;
+  const where = s.source === 'client' ? (own ? 'own key' : 'set') : s.source === 'agency' ? 'agency key from Settings' : s.source === 'env' ? 'agency key from the server' : 'set';
+  return <span className={`pill ${s.source === 'client' || !own ? 'good' : 'blue'}`}>{where} · ends in {s.hint}</span>;
+}
+
 function Secret({ id, value, onChange, placeholder }: { id: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
   const [show, setShow] = useState(false);
   return <div className="secret"><input type={show ? 'text' : 'password'} id={id} value={value} placeholder={placeholder} autoComplete="off" onChange={(e) => onChange(e.target.value)} /><button type="button" onClick={() => setShow(!show)}>{show ? 'hide' : 'show'}</button></div>;
@@ -136,7 +143,7 @@ function LaunchpadTab({ c, set, onSave, setErr, setOk }: { c: Client; set: (fn: 
         <div><label className="f" htmlFor="nm">Client name</label><input type="text" id="nm" value={c.name} onChange={(e) => set((x) => { x.name = e.target.value; })} /></div>
         <div><label className="f" htmlFor="tz">Timezone (for finder schedules)</label><input type="text" id="tz" value={lp.timezone} placeholder="America/New_York" onChange={(e) => L('timezone', e.target.value)} /></div>
         <div><label className="f" htmlFor="loc">Location id</label><input type="text" id="loc" value={lp.location_id} placeholder="the sub-account id" autoComplete="off" onChange={(e) => L('location_id', e.target.value)} /></div>
-        <div><label className="f" htmlFor="tok">Private integration token</label><Secret id="tok" value={lp.token} placeholder="pit-…" onChange={(v) => L('token', v)} /></div>
+        <div><label className="f" htmlFor="tok">Private integration token <KeyState s={c.secrets?.token} /></label><Secret id="tok" value={lp.token} placeholder={c.secrets?.token.set ? 'leave blank to keep the current token' : 'pit-…'} onChange={(v) => L('token', v)} /></div>
         <div><label className="f" htmlFor="app">Launchpad app address (for the links back)</label><input type="text" id="app" value={lp.app_url} placeholder="https://app.launchpadinnovations.ai" onChange={(e) => L('app_url', e.target.value)} /></div>
         <div><label className="f" htmlFor="own">Deal owner (user id, optional)</label><input type="text" id="own" value={lp.owner} placeholder="assign new outreach deals to this user" onChange={(e) => L('owner', e.target.value)} /></div>
         <div><label className="f" htmlFor="pipe">Outreach pipeline name</label><input type="text" id="pipe" value={lp.pipeline} placeholder="Business Development" onChange={(e) => L('pipeline', e.target.value)} />
@@ -145,8 +152,8 @@ function LaunchpadTab({ c, set, onSave, setErr, setOk }: { c: Client; set: (fn: 
         <div><label className="f" htmlFor="qs">Quote stage name (optional)</label><input type="text" id="qs" value={lp.quote_stage} placeholder="the stage that counts as a quote sent" onChange={(e) => L('quote_stage', e.target.value)} /></div>
       </div>
       {test?.ok && <Notice kind="ok"><p><strong>Connected.</strong> {test.pipelines.length} pipeline{test.pipelines.length === 1 ? '' : 's'} found{test.pipelines.length ? ': click one above to use it for outreach deals.' : '.'}</p></Notice>}
-      <SaveBar hint="Test uses the values in the form, saved or not." label="Save connection" onSave={onSave}>
-        <button className="btn secondary" type="button" onClick={runTest} disabled={!lp.location_id || !lp.token}><Icon name="link" />Test connection</button>
+      <SaveBar hint="Test uses the values in the form, saved or not; a blank token means the stored one. Tokens are never shown again once saved." label="Save connection" onSave={onSave}>
+        <button className="btn secondary" type="button" onClick={runTest} disabled={!lp.location_id || !(lp.token || c.secrets?.token.set)}><Icon name="link" />Test connection</button>
       </SaveBar>
     </section>
   );
@@ -221,16 +228,27 @@ function TemplatesTab({ c, set, onSave }: { c: Client; set: (fn: (x: Client) => 
   );
 }
 
-function KeysTab({ c, set, onSave }: { c: Client; set: (fn: (x: Client) => void) => void; onSave: () => void }) {
+function KeysTab({ c, set, onSave, onClear }: { c: Client; set: (fn: (x: Client) => void) => void; onSave: () => void; onClear: (k: 'openai' | 'apollo' | 'treg') => void }) {
   const k = c.keys;
+  const sec = c.secrets;
+  const row = (id: 'openai' | 'apollo' | 'treg', label: string, ph: string) => (
+    <div>
+      <label className="f" htmlFor={`k-${id}`}>{label} <KeyState s={sec?.[id]} own /></label>
+      <div className="search-row">
+        <Secret id={`k-${id}`} value={k[id]} placeholder={sec?.[id]?.source === 'client' ? 'leave blank to keep this client\'s key' : ph} onChange={(v) => set((x) => { x.keys[id] = v; })} />
+        {sec?.[id]?.source === 'client' && <button className="btn ghost sm" type="button" onClick={() => onClear(id)} title="Remove this client's own key; the agency key takes over"><Icon name="x" />Remove</button>}
+      </div>
+    </div>
+  );
   return (
     <section className="card">
       <h2>Keys</h2>
-      <p className="sub">Leave a key blank to use the agency key from the server's .env. Set one here when the client pays for their own.</p>
+      <p className="sub">The agency keys from Settings are used unless this client has their own. Set one here only when the client pays for their own. Saved keys are never shown again, only their last four characters.</p>
       <div className="form-grid">
-        <div><label className="f" htmlFor="ko">OpenAI key (GPT reads requests and writes fit lines)</label><Secret id="ko" value={k.openai} placeholder="sk-… (blank = agency key)" onChange={(v) => set((x) => { x.keys.openai = v; })} /></div>
+        {row('openai', 'OpenAI key (GPT reads requests and writes fit lines)', 'sk-… (blank = agency key)')}
         <div><label className="f" htmlFor="km">OpenAI model</label><input type="text" id="km" value={k.openai_model} placeholder="blank = agency default (gpt-6-luna)" onChange={(e) => set((x) => { x.keys.openai_model = e.target.value; })} /></div>
-        <div><label className="f" htmlFor="ka">Research database key</label><Secret id="ka" value={k.apollo} placeholder="blank = agency key" onChange={(v) => set((x) => { x.keys.apollo = v; })} /></div>
+        {row('apollo', 'Research database key', 'blank = agency key')}
+        {row('treg', 'treg.to key (email waterfall, not switched on yet)', 'blank = agency key')}
       </div>
       <SaveBar hint="Keys are stored on the server in the client's record, never shown to the client." label="Save keys" onSave={onSave} />
     </section>

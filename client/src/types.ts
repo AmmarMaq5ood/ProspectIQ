@@ -250,7 +250,9 @@ export interface Client {
     timezone: string;
     users: Record<string, string>;
   };
-  keys: { openai: string; openai_model: string; apollo: string };
+  keys: { openai: string; openai_model: string; apollo: string; treg: string };
+  /** Never the values: whether each secret is set, its last four characters, and where it comes from. */
+  secrets?: Record<'openai' | 'apollo' | 'treg' | 'token', SecretState>;
   credits: { monthly: number; used: number; period: string; extra: number };
   flags: { show_usage: boolean; show_activity: boolean };
   auto_push: { daily: number; day: string; used: number };
@@ -265,6 +267,21 @@ export type ActivityKind = 'finder' | 'push' | 'search' | 'lookup' | 'credits' |
 export interface ActivityItem { name: string; company?: string; id?: string; email?: string }
 export interface Activity { t: number; kind: ActivityKind; title: string; detail?: string; credits?: number; by: string; ok: boolean; n?: number; items?: ActivityItem[]; ref?: string }
 export interface ActivityPage { rows: Activity[]; total: number; page: number; pages: number; per: number }
+
+export interface SecretState { set: boolean; hint: string; source: 'client' | 'agency' | 'env' | 'none' }
+
+export interface CostLine { gpt: number; gpt_known: boolean; credits: number; research: number; total: number; searches: number; lookups: number; gpt_calls: number; tokens: number; errors: number }
+export interface CostReport {
+  months: ({ month: string; label: string } & CostLine)[];
+  selected: string;
+  label: string;
+  credit_cost: number;
+  totals: CostLine & { clients_active: number; top_client: string; top_share: number; calls: number };
+  clients: ({ slug: string; name: string; share: number; by_feature: Record<string, CostLine> } & CostLine)[];
+  features: ({ feature: string; share: number } & CostLine)[];
+  models: { model: string; calls: number; in: number; out: number; cost: number; known: boolean }[];
+  days: ({ day: string } & CostLine)[];
+}
 
 export interface Overview {
   totals: { clients: number; connected: number; finders: number; credits_total: number; credits_used: number; credits_left: number; clients_out: number; pushed_month: number; searches_month: number; finder_runs_today: number };

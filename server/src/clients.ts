@@ -82,6 +82,8 @@ function normalize(c: Client): Client {
   if (!c.flags) c.flags = { show_usage: false, show_activity: true };
   if (typeof c.flags.show_activity !== 'boolean') c.flags.show_activity = true;
   if (!c.auto_push || typeof c.auto_push.daily !== 'number') c.auto_push = { daily: 50, day: '', used: 0 };
+  if (!c.keys) c.keys = { openai: '', openai_model: '', apollo: '', treg: '' };
+  if (typeof c.keys.treg !== 'string') c.keys.treg = '';
   delete raw.limits;
   return c;
 }
@@ -97,7 +99,8 @@ export function getClientByLocation(locationId: string): Client | null {
 
 const SETTINGS = () => path.join(config.dataDir, 'settings.json');
 
-export interface AgencySettings { link_secret: string; support_email: string }
+export interface AgencyKeys { openai: string; apollo: string; treg: string }
+export interface AgencySettings { link_secret: string; support_email: string; credit_cost: number; keys: AgencyKeys }
 
 export function agencySettings(): AgencySettings {
   const s = readJson<Partial<AgencySettings>>(SETTINGS(), {});
@@ -106,6 +109,9 @@ export function agencySettings(): AgencySettings {
     writeJson(SETTINGS(), s);
   }
   if (typeof s.support_email !== 'string') s.support_email = '';
+  if (typeof s.credit_cost !== 'number' || !(s.credit_cost >= 0)) s.credit_cost = 0;
+  const k = (s.keys || {}) as Partial<AgencyKeys>;
+  s.keys = { openai: typeof k.openai === 'string' ? k.openai : '', apollo: typeof k.apollo === 'string' ? k.apollo : '', treg: typeof k.treg === 'string' ? k.treg : '' };
   return s as AgencySettings;
 }
 
@@ -163,7 +169,7 @@ export function createClient(input: { slug: string; name: string; profile?: Part
     enabled: true,
     created: Date.now(),
     launchpad: { location_id: '', token: '', app_url: config.launchpadApp, pipeline: 'Business Development', quote_stage: 'Quoted', owner: '', timezone: 'America/New_York', users: {} },
-    keys: { openai: '', openai_model: '', apollo: '' },
+    keys: { openai: '', openai_model: '', apollo: '', treg: '' },
     credits: { monthly: 1000, used: 0, period: '', extra: 0 },
     flags: { show_usage: false, show_activity: true },
     auto_push: { daily: 50, day: '', used: 0 },
@@ -173,12 +179,41 @@ export function createClient(input: { slug: string; name: string; profile?: Part
 }
 
 /** Effective keys: the client's own, else the agency's from the environment. */
-export function effectiveKeys(client: Client): { openai: string; openaiModel: string; apollo: string } {
+export function effectiveKeys(client: Client): { openai: string; openaiModel: string; apollo: string; treg: string } {
+  const a = agencySettings().keys;
   return {
-    openai: client.keys.openai || config.openaiKey,
+    openai: client.keys.openai || a.openai || config.openaiKey,
     openaiModel: client.keys.openai_model || config.openaiModel,
-    apollo: client.keys.apollo || config.apolloKey,
+    apollo: client.keys.apollo || a.apollo || config.apolloKey,
+    treg: client.keys.treg || a.treg || config.tregKey,
   };
+}
+
+export type SecretKind = 'openai' | 'apollo' | 'treg';
+export interface SecretState { set: boolean; hint: string; source: 'client' | 'agency' | 'env' | 'none' }
+
+/** Never the value itself: whether it is set, its last four characters, and where it comes from. */
+export function maskSecret(v: string, source: SecretState['source'] = 'client'): SecretState {
+  return v ? { set: true, hint: '…' + v.slice(-4), source } : { set: false, hint: '', source: 'none' };
+}
+
+/** The agency's keys as the Settings page may see them. */
+export function agencyKeyStates(): Record<SecretKind, SecretState> {
+  const a = agencySettings().keys;
+  const env: Record<SecretKind, string> = { openai: config.openaiKey, apollo: config.apolloKey, treg: config.tregKey };
+  const one = (k: SecretKind) => (a[k] ? maskSecret(a[k], 'agency') : env[k] ? maskSecret(env[k], 'env') : maskSecret('', 'none'));
+  return { openai: one('openai'), apollo: one('apollo'), treg: one('treg') };
+}
+
+/** A client for the admin panel: secrets blanked, with their state beside them. */
+export function adminView(client: Client): Client & { secrets: Record<SecretKind | 'token', SecretState> } {
+  const agency = agencyKeyStates();
+  const own = (k: SecretKind) => (client.keys[k] ? maskSecret(client.keys[k], 'client') : agency[k]);
+  const c = structuredClone(client);
+  c.keys = { ...c.keys, openai: '', apollo: '', treg: '' };
+  const token = maskSecret(client.launchpad.token, 'client');
+  c.launchpad = { ...c.launchpad, token: '' };
+  return { ...c, secrets: { openai: own('openai'), apollo: own('apollo'), treg: own('treg'), token } };
 }
 
 /** Public view of a client for the app shell (no secrets). */

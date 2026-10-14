@@ -139,6 +139,8 @@ export interface Client {
     openai: string;
     openai_model: string;
     apollo: string;
+    /** treg.to (email waterfall), stored for when it is wired in. */
+    treg: string;
   };
   /** Monthly credits: one per lead added to Launchpad with a work email. `monthly` resets `used` on the 1st; `extra` is this month's bonus. */
   credits: { monthly: number; used: number; period: string; extra: number };

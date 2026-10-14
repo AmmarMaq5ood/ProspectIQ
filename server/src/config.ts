@@ -17,6 +17,7 @@ export const config = {
   openaiKey: process.env.OPENAI_API_KEY || '',
   openaiModel: process.env.OPENAI_MODEL || 'gpt-6-luna',
   apolloKey: process.env.APOLLO_API_KEY || '',
+  tregKey: process.env.TREG_API_KEY || '',
   launchpadApp: (process.env.LAUNCHPAD_APP_URL || 'https://app.launchpadinnovations.ai').replace(/\/$/, ''),
   publicUrl: (process.env.PUBLIC_URL || `http://localhost:${process.env.PORT || 3000}`).replace(/\/$/, ''),
   /** USD per million tokens [input, output], by model prefix; for the usage page. */
