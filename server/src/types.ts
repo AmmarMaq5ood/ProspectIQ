@@ -149,7 +149,7 @@ export interface Client {
   credits: { monthly: number; used: number; period: string; extra: number };
   flags: { show_usage: boolean; show_activity: boolean; email_waterfall: boolean };
   /** Daily cap on what the finders push, across all of them: `used` counts leads pushed on `day` (client's timezone). */
-  auto_push: { daily: number; day: string; used: number };
+  auto_push: { daily: number; day: string; used: number; /** finders allowed to run at the same time (default 2) */ max_finders?: number };
   profile: Profile;
 }
 

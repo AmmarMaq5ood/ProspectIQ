@@ -3,7 +3,7 @@ import path from 'node:path';
 import { config } from './config.js';
 import { createClient, deleteClient, effectiveKeys, getClient, getClientByKey, getClientByLocation, listClients, newKey, publicClient, rotateLinkSecret, saveClient, saveAgencySettings, agencySettings, universalLink } from './clients.js';
 import { addCredits, creditCheck, creditLedger, creditsLeft, creditsView, restoreFull, setMonthly, spendCredits } from './credits.js';
-import { autoPushState } from './autopush.js';
+import { autoPushState, finderLimitText, maxFinders } from './autopush.js';
 import { adminView, agencyKeyStates } from './clients.js';
 import { costReport, usageReadSince } from './costs.js';
 import type { AgencySettings } from './clients.js';
@@ -272,11 +272,14 @@ function finderView(f: Finder, tz: string) {
 
 api.get('/finders', requireClient('finders'), (req, res) => {
   const { client } = req.piq!;
-  res.json({ finders: listFinders(client.slug).map((f) => finderView(f, client.launchpad.timezone)), auto_push: autoPushState(client) });
+  const all = listFinders(client.slug);
+  res.json({ finders: all.map((f) => finderView(f, client.launchpad.timezone)), auto_push: autoPushState(client), active_finders: all.filter((f) => f.enabled).length });
 });
 
 api.post('/finders', requireClient('finders'), wrap(async (req, res) => {
   const { client } = req.piq!;
+  const blocked = finderLimitText(maxFinders(client), listFinders(client.slug).filter((f) => f.enabled).length);
+  if (blocked) return res.status(400).json({ error: blocked });
   const f = createFinder(client, req.body || {});
   res.json({ finder: finderView(f, client.launchpad.timezone) });
 }));
@@ -289,7 +292,13 @@ api.post('/finders/:id/run', requireClient('finders'), wrap(async (req, res) => 
 
 api.post('/finders/:id/toggle', requireClient('finders'), (req, res) => {
   const { client } = req.piq!;
-  const all = listFinders(client.slug).map((f) => (f.id === req.params.id ? { ...f, enabled: !f.enabled } : f));
+  const current = listFinders(client.slug);
+  const target = current.find((f) => f.id === req.params.id);
+  if (target && !target.enabled) {
+    const blocked = finderLimitText(maxFinders(client), current.filter((f) => f.enabled).length);
+    if (blocked) return res.status(400).json({ error: blocked });
+  }
+  const all = current.map((f) => (f.id === req.params.id ? { ...f, enabled: !f.enabled } : f));
   saveFinders(client.slug, all);
   res.json({ ok: true });
 });
@@ -389,10 +398,16 @@ admin.put('/clients/:slug', (req, res) => {
       logActivity(c.slug, { kind: 'system', title: `Email waterfall switched ${b.flags.email_waterfall ? 'on' : 'off'}`, detail: b.flags.email_waterfall ? 'Pushes and finders look up a work email for leads the research database has none for.' : '', by: 'admin', ok: true, n: 0 });
     }
   }
-  if (b.auto_push && typeof b.auto_push === 'object' && Number.isFinite(Number(b.auto_push.daily))) {
+  if (b.auto_push && typeof b.auto_push === 'object') {
     const st = autoPushState(c);
-    c.auto_push = { daily: Math.max(0, Math.round(Number(b.auto_push.daily))), day: st.day, used: st.used };
-    logActivity(c.slug, { kind: 'credits', title: `Automatic push limit set to ${c.auto_push.daily} a day`, detail: 'Applies to the finders only; manual pushes are limited by credits.', credits: 0, by: 'admin', ok: true, n: 0 });
+    if (Number.isFinite(Number(b.auto_push.daily))) {
+      c.auto_push = { ...c.auto_push, daily: Math.max(0, Math.round(Number(b.auto_push.daily))), day: st.day, used: st.used };
+      logActivity(c.slug, { kind: 'credits', title: `Automatic push limit set to ${c.auto_push.daily} a day`, detail: 'Applies to the finders only; manual pushes are limited by credits.', credits: 0, by: 'admin', ok: true, n: 0 });
+    }
+    if (Number.isFinite(Number(b.auto_push.max_finders))) {
+      c.auto_push = { ...c.auto_push, max_finders: Math.max(0, Math.round(Number(b.auto_push.max_finders))) };
+      logActivity(c.slug, { kind: 'credits', title: `Finders running at once set to ${c.auto_push.max_finders}`, detail: 'Finders beyond the limit have to be paused or removed before another can run.', credits: 0, by: 'admin', ok: true, n: 0 });
+    }
   }
   if (b.profile && typeof b.profile === 'object') c.profile = cleanProfile({ ...c.profile, ...b.profile });
   saveClient(c);

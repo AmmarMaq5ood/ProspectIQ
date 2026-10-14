@@ -9,6 +9,21 @@ import type { Client } from './types.js';
  */
 
 export const DEFAULT_AUTO_PUSH_DAILY = 50;
+export const DEFAULT_MAX_FINDERS = 2;
+
+/** How many finders may be running at the same time for this client. */
+export function maxFinders(c: Client): number {
+  const m = c.auto_push?.max_finders;
+  return typeof m === 'number' && m >= 0 ? Math.round(m) : DEFAULT_MAX_FINDERS;
+}
+
+/** '' when another finder may run; otherwise what the client reads. */
+export function finderLimitText(max: number, active: number): string {
+  if (active < max) return '';
+  return max === 0
+    ? 'Daily finders are switched off for this account. Ask your Launchpad team to switch them on.'
+    : `You can have ${max} daily finder${max === 1 ? '' : 's'} running at a time, and ${active} ${active === 1 ? 'is' : 'are'} running now. Pause or remove one to add another.`;
+}
 
 /** YYYY-MM-DD for "now" in a timezone. */
 export function dayKeyIn(timeZone: string, now = Date.now()): string {
@@ -19,7 +34,7 @@ export function dayKeyIn(timeZone: string, now = Date.now()): string {
   }
 }
 
-export interface AutoPushView { daily: number; used: number; left: number; day: string; timezone: string }
+export interface AutoPushView { daily: number; used: number; left: number; day: string; timezone: string; max_finders: number }
 
 /** Today's state. A new day starts the count again (not saved here; spending saves). */
 export function autoPushState(c: Client, now = Date.now()): AutoPushView {
@@ -28,7 +43,7 @@ export function autoPushState(c: Client, now = Date.now()): AutoPushView {
   const ap = c.auto_push || { daily: DEFAULT_AUTO_PUSH_DAILY, day: '', used: 0 };
   const used = ap.day === day ? ap.used : 0;
   const daily = Math.max(0, ap.daily);
-  return { daily, used, left: Math.max(0, daily - used), day, timezone: tz };
+  return { daily, used, left: Math.max(0, daily - used), day, timezone: tz, max_finders: maxFinders(c) };
 }
 
 /** Count leads a finder just pushed. Re-reads the record first so two runs never overwrite each other. */
@@ -36,7 +51,7 @@ export function autoPushSpend(client: Client, n: number, now = Date.now()): Auto
   if (n <= 0) return autoPushState(client, now);
   const c = getClient(client.slug) || client;
   const st = autoPushState(c, now);
-  c.auto_push = { daily: st.daily, day: st.day, used: st.used + n };
+  c.auto_push = { ...c.auto_push, daily: st.daily, day: st.day, used: st.used + n };
   saveClient(c);
   client.auto_push = c.auto_push;
   return autoPushState(c, now);
@@ -45,7 +60,7 @@ export function autoPushSpend(client: Client, n: number, now = Date.now()): Auto
 export function setAutoPushDaily(client: Client, daily: number): Client {
   const c = getClient(client.slug) || client;
   const st = autoPushState(c);
-  c.auto_push = { daily: Math.max(0, Math.round(daily)), day: st.day, used: st.used };
+  c.auto_push = { ...c.auto_push, daily: Math.max(0, Math.round(daily)), day: st.day, used: st.used };
   saveClient(c);
   return c;
 }

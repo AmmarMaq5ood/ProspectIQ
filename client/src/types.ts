@@ -138,7 +138,7 @@ export interface PublicClient {
 }
 
 /** The daily cap on what the finders push: used / left today, in the client's timezone. */
-export interface AutoPush { daily: number; used: number; left: number; day: string; timezone: string }
+export interface AutoPush { daily: number; used: number; left: number; day: string; timezone: string; max_finders: number }
 
 export interface Me { client: PublicClient | null; admin: boolean; sample: boolean }
 
@@ -258,7 +258,7 @@ export interface Client {
   secrets?: Record<'openai' | 'apollo' | 'treg' | 'token', SecretState>;
   credits: { monthly: number; used: number; period: string; extra: number };
   flags: { show_usage: boolean; show_activity: boolean; email_waterfall: boolean };
-  auto_push: { daily: number; day: string; used: number };
+  auto_push: { daily: number; day: string; used: number; max_finders?: number };
   profile: Profile;
 }
 

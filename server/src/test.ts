@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.js';
 import { logActivity, readActivity, readActivityAll } from './activity.js';
-import { autoPushState, dayKeyIn } from './autopush.js';
+import { autoPushState, dayKeyIn, finderLimitText, maxFinders } from './autopush.js';
 import { costReport, featureOf, lastMonths, monthKey } from './costs.js';
 import { isFreeMail, pickEmail, waterfall } from './treg.js';
 import type { Client, Finder, Person, UsageRow } from './types.js';
@@ -165,6 +165,13 @@ ok('activity filters', readActivity('test', { kind: 'push' }).total === 3 && rea
   const slow = async () => { clock += 20000; return { email: 'late@acme.com', verified: true, provider: 'slow', cost: 0.02 }; };
   const r2 = await waterfall({ slug: 'test', key: 'k', ctx: 'test' }, [mk('x'), mk('y'), mk('z')], { budgetMs: 30000, maxFinds: 9, concurrency: 1, find: slow as never, now: () => clock });
   ok('waterfall: stops at the time budget', r2.tried === 2 && r2.found === 2);
+}
+
+/* ---- finders running at once ---- */
+{
+  const base = { slug: 'x', launchpad: { timezone: 'UTC' } } as unknown as Client;
+  ok('finders at once: default 2, admin value wins', maxFinders({ ...base, auto_push: { daily: 50, day: '', used: 0 } } as Client) === 2 && maxFinders({ ...base, auto_push: { daily: 50, day: '', used: 0, max_finders: 5 } } as Client) === 5);
+  ok('finders at once: room, then blocked, then off', finderLimitText(2, 1) === '' && /Pause or remove one/.test(finderLimitText(2, 2)) && /switched off/.test(finderLimitText(0, 0)));
 }
 
 console.log(process.exitCode ? `FAILURES in ${n} checks` : `all ${n} checks pass`);

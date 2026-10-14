@@ -264,13 +264,15 @@ function CreditsTab({ c, slug, onToggleUsage, onToggleActivity }: { c: Client; s
   const [add, setAdd] = useState(100);
   const [monthly, setMonthly] = useState(c.credits.monthly);
   const [daily, setDaily] = useState(c.auto_push?.daily ?? 50);
+  const [maxF, setMaxF] = useState(c.auto_push?.max_finders ?? 2);
   const [err, setErr] = useState('');
-  const load = () => api<{ credits: Credits; ledger: CreditEntry[]; auto_push?: AutoPush }>(`/admin/clients/${encodeURIComponent(slug)}/credits`).then((r) => { setCr(r); setMonthly(r.credits.monthly); if (r.auto_push) setDaily(r.auto_push.daily); }).catch((e) => setErr(errText(e)));
-  const saveDaily = async () => {
+  const load = () => api<{ credits: Credits; ledger: CreditEntry[]; auto_push?: AutoPush }>(`/admin/clients/${encodeURIComponent(slug)}/credits`).then((r) => { setCr(r); setMonthly(r.credits.monthly); if (r.auto_push) { setDaily(r.auto_push.daily); setMaxF(r.auto_push.max_finders ?? 2); } }).catch((e) => setErr(errText(e)));
+  const saveAuto = async (body: Record<string, number>) => {
     setErr('');
-    try { await api(`/admin/clients/${encodeURIComponent(slug)}`, { method: 'PUT', body: { auto_push: { daily } } }); await load(); }
+    try { await api(`/admin/clients/${encodeURIComponent(slug)}`, { method: 'PUT', body: { auto_push: body } }); await load(); }
     catch (e) { setErr(errText(e)); }
   };
+  const saveDaily = () => saveAuto({ daily });
   useEffect(() => { load(); }, [slug]);
   const post = async (body: Record<string, unknown>) => {
     setErr('');
@@ -305,7 +307,7 @@ function CreditsTab({ c, slug, onToggleUsage, onToggleActivity }: { c: Client; s
       </section>
       <section className="card" style={{ marginBottom: 12 }}>
         <h2>Automatic pushes (finders)</h2>
-        <p className="sub">How many leads all of this client's finders together may add to Launchpad per day, in the client's timezone. Manual pushes from the research tabs are not counted; credits limit those. At the cap, finders pause until midnight and the client sees the support email.</p>
+        <p className="sub">How many leads all of this client's finders together may add to Launchpad per day, in the client's timezone, and how many finders may run at a time. Manual pushes from the research tabs are not counted; credits limit those. At the daily cap, finders pause until midnight and the client sees the support email.</p>
         <div className="credits-card">
           <dl className="kv">
             <dt>Daily limit</dt><dd><b><Num value={cr?.auto_push?.daily ?? c.auto_push?.daily ?? 50} /></b></dd>
@@ -313,7 +315,10 @@ function CreditsTab({ c, slug, onToggleUsage, onToggleActivity }: { c: Client; s
             <dt>Left today</dt><dd><Num value={cr?.auto_push?.left ?? (c.auto_push?.daily ?? 50)} /></dd>
             <dt>Day</dt><dd>{cr?.auto_push?.day || '—'} ({c.launchpad.timezone})</dd>
           </dl>
-          <div style={{ flex: 1, minWidth: 220 }}><label className="f" htmlFor="apd">Daily limit on automatic pushes</label><div className="search-row"><input type="number" id="apd" min={0} step={10} value={daily} onChange={(e) => setDaily(Math.max(0, Number(e.target.value) || 0))} /><button className="btn" type="button" onClick={saveDaily}><Icon name="check" />Set</button></div></div>
+          <div style={{ flex: 1, minWidth: 220, display: 'grid', gap: 12 }}>
+            <div><label className="f" htmlFor="apd">Daily limit on automatic pushes</label><div className="search-row"><input type="number" id="apd" min={0} step={10} value={daily} onChange={(e) => setDaily(Math.max(0, Number(e.target.value) || 0))} /><button className="btn" type="button" onClick={saveDaily}><Icon name="check" />Set</button></div></div>
+            <div><label className="f" htmlFor="apf">Finders running at a time</label><div className="search-row"><input type="number" id="apf" min={0} step={1} value={maxF} onChange={(e) => setMaxF(Math.max(0, Number(e.target.value) || 0))} /><button className="btn" type="button" onClick={() => saveAuto({ max_finders: maxF })}><Icon name="check" />Set</button></div><p className="hint" style={{ margin: '6px 0 0' }}>The client cannot save or resume a finder beyond this; 0 switches finders off for the account.</p></div>
+          </div>
         </div>
       </section>
       <section className="card" style={{ marginBottom: 12 }}>
