@@ -79,8 +79,9 @@ function normalize(c: Client): Client {
   const raw = c as Client & { limits?: unknown };
   const old = c.credits as unknown as { total?: number; monthly?: number; used?: number; period?: string; extra?: number } | undefined;
   if (!old || typeof old.monthly !== 'number') c.credits = { monthly: typeof old?.total === 'number' ? old.total : 1000, used: old?.used || 0, period: '', extra: 0 };
-  if (!c.flags) c.flags = { show_usage: false, show_activity: true };
+  if (!c.flags) c.flags = { show_usage: false, show_activity: true, email_waterfall: false };
   if (typeof c.flags.show_activity !== 'boolean') c.flags.show_activity = true;
+  if (typeof c.flags.email_waterfall !== 'boolean') c.flags.email_waterfall = false;
   if (!c.auto_push || typeof c.auto_push.daily !== 'number') c.auto_push = { daily: 50, day: '', used: 0 };
   if (!c.keys) c.keys = { openai: '', openai_model: '', apollo: '', treg: '' };
   if (typeof c.keys.treg !== 'string') c.keys.treg = '';
@@ -171,7 +172,7 @@ export function createClient(input: { slug: string; name: string; profile?: Part
     launchpad: { location_id: '', token: '', app_url: config.launchpadApp, pipeline: 'Business Development', quote_stage: 'Quoted', owner: '', timezone: 'America/New_York', users: {} },
     keys: { openai: '', openai_model: '', apollo: '', treg: '' },
     credits: { monthly: 1000, used: 0, period: '', extra: 0 },
-    flags: { show_usage: false, show_activity: true },
+    flags: { show_usage: false, show_activity: true, email_waterfall: false },
     auto_push: { daily: 50, day: '', used: 0 },
     profile: { ...blankProfile(input.name.trim()), ...(input.profile || {}) },
   };
@@ -233,6 +234,7 @@ export function publicClient(client: Client) {
     credits: creditsView(client),
     show_usage: !!client.flags.show_usage,
     show_activity: client.flags.show_activity !== false,
+    email_waterfall: !!client.flags.email_waterfall && !!keys.treg,
     support_email: agencySettings().support_email || '',
     auto_push: autoPushState(client),
   };

@@ -150,8 +150,8 @@ export default function Usage({ adminSlug, timezone }: { adminSlug?: string; tim
                   {s.recent.map((r, i) => (
                     <tr key={i}>
                       <td className="num" style={{ textAlign: 'left' }}>{fmtWhen(r.t, tz)}</td>
-                      <td>{r.p === 'openai' ? 'GPT' : 'Research'}</td>
-                      <td>{r.p === 'openai' ? `${r.model || ''}${r.kind ? ` · ${r.kind}` : ''}` : r.ep || ''}</td>
+                      <td>{r.p === 'openai' ? 'GPT' : r.p === 'treg' ? 'Email waterfall' : 'Research'}</td>
+                      <td>{r.p === 'openai' ? `${r.model || ''}${r.kind ? ` · ${r.kind}` : ''}` : r.p === 'treg' ? (r.n ? `email found (${r.model || 'unverified'})` : 'no email found') : r.ep || ''}</td>
                       <td>{ctxLabel(r.ctx)}</td>
                       <td className="num">{r.p === 'openai' ? `${nf(r.in || 0)} + ${nf(r.out || 0)}` : r.credit ? `${r.credit} credit` : r.n != null ? `${nf(r.n)} results` : '—'}</td>
                       <td className="num">{nf(r.ms)}</td>

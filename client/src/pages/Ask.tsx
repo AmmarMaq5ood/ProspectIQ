@@ -256,7 +256,7 @@ export default function Ask() {
           </div>
           {rows.length > 0 && (
             <div className="pushbar">
-              <PushCount n={nSel} people={isPeople} nEmail={nEmail} left={left} />
+              <PushCount n={nSel} people={isPeople} nEmail={nEmail} left={left} waterfall={c.email_waterfall} />
               {me.sample && <span className="hint">Sample mode: pushing is off.</span>}
               {isPeople && left <= 0 && <span className="warn">{outOfCredits(c)}</span>}
               {!me.sample && isPeople && left > 0 && nEmail > left && <span className="warn">Only {nf(left)} credits left this month: untick {nEmail - left}.</span>}

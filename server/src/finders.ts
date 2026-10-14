@@ -12,7 +12,7 @@ import { annotateInLaunchpad } from './lpindex.js';
 import { creditsLeft, outOfCreditsText, spendCredits } from './credits.js';
 import { autoPushLimitText, autoPushSpend, autoPushState } from './autopush.js';
 import { logActivity } from './activity.js';
-import { pushCompanies, pushPeople } from './push.js';
+import { pushCompanies, pushPeople, waterfallPlan } from './push.js';
 import type { Client, Finder, Org, Person } from './types.js';
 
 /** Saved searches that run on their own: storage, schedule maths, one run, and the in-process scheduler. */
@@ -167,9 +167,11 @@ export async function runFinder(client: Client, f: Finder, live: boolean): Promi
   const pushed: RunResult['pushed'] = [];
   const errors: string[] = [];
   let spent = 0;
+  let waterfallNote = '';
   if (intent.kind === 'people') {
-    const r = await pushPeople(client, picked as Person[], {}, { live, apollo, tags, noteHeader: header, fits });
+    const r = await pushPeople(client, picked as Person[], {}, { live, apollo, tags, noteHeader: header, fits, waterfall: waterfallPlan(client, 'finder', `finder:${f.name}`) });
     credits = r.credits;
+    if (r.waterfall && r.waterfall.tried) waterfallNote = `, email waterfall found ${r.waterfall.found} of ${r.waterfall.tried}`;
     spent = r.spent;
     if (live && spent) spendCredits(client, spent, `finder: ${f.name}`, 'finder');
     errors.push(...r.errors);
@@ -183,7 +185,7 @@ export async function runFinder(client: Client, f: Finder, live: boolean): Promi
   const ok = errors.length === 0;
   const nowLeft = creditsLeft(client);
   const after = pushed.length ? autoPushSpend(client, pushed.length) : cap;
-  let text = ok ? `${pushed.length} new lead${pushed.length === 1 ? '' : 's'} pushed into Launchpad${skipped ? `, ${skipped} already there skipped` : ''}${spent ? `, ${spent} credit${spent === 1 ? '' : 's'} used (${nowLeft} left)` : ''}.` : errors.join(' ');
+  let text = ok ? `${pushed.length} new lead${pushed.length === 1 ? '' : 's'} pushed into Launchpad${skipped ? `, ${skipped} already there skipped` : ''}${waterfallNote}${spent ? `, ${spent} credit${spent === 1 ? '' : 's'} used (${nowLeft} left)` : ''}.` : errors.join(' ');
   if (ok && (capped || after.left <= 0)) text += ` ${after.used} of ${after.daily} automatic pushes used today${after.left <= 0 ? ': the finders pause until tomorrow' : ''}.`;
   return { ok, text, pushed, credits, spent, left: nowLeft, skipped, seen: seenOut, limited: after.left <= 0 };
 }

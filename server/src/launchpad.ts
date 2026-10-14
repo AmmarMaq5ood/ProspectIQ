@@ -216,7 +216,7 @@ export async function pushProspect(lp: LP, p: { company: { name: string; website
   for (const c of p.contacts) {
     const [id, isNew] = await pushContact(lp, c, p.company.name, biz, { industry: p.company.industry, company_size: p.company.size, follow_up_cadence: 'two weeks' });
     ids.push(id);
-    out.contacts.push({ name: `${c.first} ${c.last}`.trim(), role: c.role || '', id, new: isNew, email: c.email || '' });
+    out.contacts.push({ name: `${c.first} ${c.last}`.trim(), role: c.role || '', id, new: isNew, email: c.email || '', email_source: c.email ? c.email_source || 'research' : undefined, email_verified: c.email_source === 'waterfall' ? !!c.email_verified : undefined });
     log.push(`Contact: ${c.first} ${c.last} (${c.role}) ${isNew ? 'created' : 'updated'}`);
   }
   if (ids[0]) {

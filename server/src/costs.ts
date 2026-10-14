@@ -14,7 +14,7 @@ import type { UsageRow } from './types.js';
 const SEARCH_EPS = ['/mixed_people/api_search', '/mixed_companies/search'];
 const LOOKUP_EPS = ['/people/match', '/organizations/enrich', '/organizations/bulk_enrich'];
 
-export interface CostLine { gpt: number; gpt_known: boolean; credits: number; research: number; total: number; searches: number; lookups: number; gpt_calls: number; tokens: number; errors: number }
+export interface CostLine { gpt: number; gpt_known: boolean; credits: number; research: number; waterfall: number; waterfall_calls: number; waterfall_found: number; total: number; searches: number; lookups: number; gpt_calls: number; tokens: number; errors: number }
 export interface CostReport {
   months: ({ month: string; label: string } & CostLine)[];
   selected: string;
@@ -29,7 +29,7 @@ export interface CostReport {
 
 export interface ClientUsage { slug: string; name: string; timezone: string; rows: UsageRow[] }
 
-export const emptyLine = (): CostLine => ({ gpt: 0, gpt_known: true, credits: 0, research: 0, total: 0, searches: 0, lookups: 0, gpt_calls: 0, tokens: 0, errors: 0 });
+export const emptyLine = (): CostLine => ({ gpt: 0, gpt_known: true, credits: 0, research: 0, waterfall: 0, waterfall_calls: 0, waterfall_found: 0, total: 0, searches: 0, lookups: 0, gpt_calls: 0, tokens: 0, errors: 0 });
 
 /** YYYY-MM of a moment in a timezone. */
 export function monthKey(ms: number, timeZone: string): string {
@@ -59,7 +59,7 @@ export function lastMonths(n: number, now = Date.now()): string[] {
 
 /** Which feature a logged call belongs to, in the words the admin uses. */
 export function featureOf(ctx: string): string {
-  const map: Record<string, string> = { 'research:ask': 'Ask', 'research:people': 'People tab', 'research:companies': 'Companies tab', 'research:industries': 'Industries tab', 'research:lookup': 'Company lookup', 'admin:draft': 'Admin: profile draft', usage: 'Usage page', me: 'Sign-in' };
+  const map: Record<string, string> = { 'research:ask': 'Ask', 'research:people': 'People tab', 'research:companies': 'Companies tab', 'research:industries': 'Industries tab', 'research:lookup': 'Company lookup', 'research:push': 'Pushes (research tabs)', 'admin:draft': 'Admin: profile draft', usage: 'Usage page', me: 'Sign-in' };
   if (map[ctx]) return map[ctx];
   if (ctx.startsWith('finder:')) return 'Daily finders';
   return 'Other';
@@ -74,6 +74,11 @@ export function addRow(line: CostLine, r: UsageRow, creditCost: number): void {
     const credit = r.credit || 0;
     line.credits += credit;
     line.research += credit * creditCost;
+  } else if (r.p === 'treg') {
+    line.waterfall_calls++;
+    line.waterfall += r.cost || 0;
+    if (!r.ok) { line.errors++; return; }
+    line.waterfall_found += r.n || 0;
   } else if (r.p === 'openai') {
     line.gpt_calls++;
     if (!r.ok) { line.errors++; return; }
@@ -81,7 +86,7 @@ export function addRow(line: CostLine, r: UsageRow, creditCost: number): void {
     if (r.cost != null) line.gpt += r.cost;
     else line.gpt_known = false;
   }
-  line.total = line.gpt + line.research;
+  line.total = line.gpt + line.research + line.waterfall;
 }
 
 const share = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 1000) / 10 : 0);

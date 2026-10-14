@@ -75,7 +75,7 @@ export default function Lookup() {
               const l = pushed.links[i] || { company: '', opportunity: '', contacts: [] };
               return [
                 <li key="c"><div className="t"><LpLink href={x.company.id ? l.company : ''}>{x.company.name}</LpLink></div><div className="m">Company record{!x.company.id && ' (not created: contacts are grouped by company name instead)'}</div></li>,
-                ...x.contacts.map((p, j) => <li key={`p${j}`}><div className="t"><LpLink href={p.id ? l.contacts[j] : ''}>{p.name}</LpLink></div><div className="m">{p.role}{p.new ? ' · created' : ' · updated'}{p.email ? ` · ${p.email}` : ' · no work email on file'}</div></li>),
+                ...x.contacts.map((p, j) => <li key={`p${j}`}><div className="t"><LpLink href={p.id ? l.contacts[j] : ''}>{p.name}</LpLink></div><div className="m">{p.role}{p.new ? ' · created' : ' · updated'}{p.email ? <> · {p.email}{p.email_source === 'waterfall' && <span className={`pill ${p.email_verified ? 'good' : ''}`} style={{ marginLeft: 6 }}>{p.email_verified ? 'found by the email waterfall' : 'found by the email waterfall · unverified'}</span>}</> : ' · no work email on file'}</div></li>),
                 x.opportunity.id ? <li key="o"><div className="t"><LpLink href={l.opportunity}>{x.opportunity.name}</LpLink></div><div className="m">{x.opportunity.created ? 'Outreach deal created at the first stage' : 'Outreach deal already existed'}{x.note_added ? ' · research note and connection message saved on the first contact' : ' · the note was already on the first contact'}</div></li> : null,
               ];
             })}
@@ -177,7 +177,7 @@ export default function Lookup() {
           </section>
 
           <div className="pushbar">
-            <PushCount n={nSel} people nEmail={nEmail} left={left} />
+            <PushCount n={nSel} people nEmail={nEmail} left={left} waterfall={c.email_waterfall} />
             {me.sample && <span className="hint">Sample mode: pushing is off.</span>}
             {left <= 0 && <span className="warn">{outOfCredits(c)}</span>}
             {!me.sample && left > 0 && nEmail > left && <span className="warn">Only {nf(left)} credits left this month: untick {nEmail - left}.</span>}

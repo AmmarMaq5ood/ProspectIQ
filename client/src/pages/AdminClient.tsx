@@ -76,7 +76,7 @@ export default function AdminClient() {
       }} />}
       {tab === 'templates' && <TemplatesTab c={c} set={set} onSave={() => save({ profile: c.profile }, 'Templates')} />}
       {tab === 'credits' && <CreditsTab c={c} slug={slug} onToggleUsage={(v) => { set((x) => { x.flags.show_usage = v; }); save({ flags: { show_usage: v } }, 'Visibility'); }} onToggleActivity={(v) => { set((x) => { x.flags.show_activity = v; }); save({ flags: { show_activity: v } }, 'Visibility'); }} />}
-      {tab === 'keys' && <KeysTab c={c} set={set} onSave={() => save({ keys: c.keys }, 'Keys')} onClear={(k) => { if (confirm('Remove this client\'s own key? The agency key takes over.')) save({ keys: { [k]: null } }, 'Keys'); }} />}
+      {tab === 'keys' && <KeysTab c={c} set={set} onSave={() => save({ keys: c.keys }, 'Keys')} onClear={(k) => { if (confirm('Remove this client\'s own key? The agency key takes over.')) save({ keys: { [k]: null } }, 'Keys'); }} onWaterfall={(v) => { set((x) => { x.flags.email_waterfall = v; }); save({ flags: { email_waterfall: v } }, 'Email waterfall'); }} />}
       {tab === 'access' && <AccessTab c={c} links={data.links} set={set} onSave={() => save({ enabled: c.enabled, name: c.name }, 'Access')} onRotate={async () => {
         if (!confirm('Rotate the access key? The old menu links stop working until you update them in Launchpad.')) return;
         try { const r = await api<{ client: Client; links: MenuLink[] }>(`/admin/clients/${encodeURIComponent(slug)}/rotate-key`, { body: {} }); setData((d) => (d ? { ...d, client: r.client, links: r.links } : d)); setC(structuredClone(r.client)); setOk('New access key issued.'); } catch (e) { setErr(errText(e)); }
@@ -228,7 +228,7 @@ function TemplatesTab({ c, set, onSave }: { c: Client; set: (fn: (x: Client) => 
   );
 }
 
-function KeysTab({ c, set, onSave, onClear }: { c: Client; set: (fn: (x: Client) => void) => void; onSave: () => void; onClear: (k: 'openai' | 'apollo' | 'treg') => void }) {
+function KeysTab({ c, set, onSave, onClear, onWaterfall }: { c: Client; set: (fn: (x: Client) => void) => void; onSave: () => void; onClear: (k: 'openai' | 'apollo' | 'treg') => void; onWaterfall: (v: boolean) => void }) {
   const k = c.keys;
   const sec = c.secrets;
   const row = (id: 'openai' | 'apollo' | 'treg', label: string, ph: string) => (
@@ -248,9 +248,13 @@ function KeysTab({ c, set, onSave, onClear }: { c: Client; set: (fn: (x: Client)
         {row('openai', 'OpenAI key (GPT reads requests and writes fit lines)', 'sk-… (blank = agency key)')}
         <div><label className="f" htmlFor="km">OpenAI model</label><input type="text" id="km" value={k.openai_model} placeholder="blank = agency default (gpt-6-luna)" onChange={(e) => set((x) => { x.keys.openai_model = e.target.value; })} /></div>
         {row('apollo', 'Research database key', 'blank = agency key')}
-        {row('treg', 'treg.to key (email waterfall, not switched on yet)', 'blank = agency key')}
+        {row('treg', 'treg.to key (email waterfall)', 'blank = agency key')}
       </div>
       <SaveBar hint="Keys are stored on the server in the client's record, never shown to the client." label="Save keys" onSave={onSave} />
+      <div className="wfbox">
+        <Switch on={!!c.flags.email_waterfall} onChange={onWaterfall} label={c.flags.email_waterfall ? 'Email waterfall is on for this client' : 'Email waterfall is off for this client'} />
+        <p className="hint">When on, every push and finder run sends the leads that came back without a work email through treg.to (name + company domain across 100+ providers, verified where possible). Each lookup is a small charge, about one to two cents, logged on the Costs page. Manual pushes give it 30 seconds, finders 90. It never spends past the client's credits left. Needs a treg.to key here or in Settings{c.secrets?.treg?.set ? '' : ' (none set yet)'}.</p>
+      </div>
     </section>
   );
 }

@@ -72,6 +72,9 @@ export interface Person {
   org?: Org;
   /** Set when this person is already a Launchpad contact (pushed before, or found by name + company). */
   in_lp?: { id: string; name: string };
+  /** Where the email came from when the research database had none ('waterfall'), and whether it verified. */
+  email_source?: 'research' | 'waterfall';
+  email_verified?: boolean;
 }
 
 export interface Org {
@@ -144,7 +147,7 @@ export interface Client {
   };
   /** Monthly credits: one per lead added to Launchpad with a work email. `monthly` resets `used` on the 1st; `extra` is this month's bonus. */
   credits: { monthly: number; used: number; period: string; extra: number };
-  flags: { show_usage: boolean; show_activity: boolean };
+  flags: { show_usage: boolean; show_activity: boolean; email_waterfall: boolean };
   /** Daily cap on what the finders push, across all of them: `used` counts leads pushed on `day` (client's timezone). */
   auto_push: { daily: number; day: string; used: number };
   profile: Profile;
@@ -180,7 +183,7 @@ export interface RecentSearch {
 export interface UsageRow {
   t: number;
   ctx: string;
-  p: 'apollo' | 'openai';
+  p: 'apollo' | 'openai' | 'treg';
   ok: 0 | 1;
   ms: number;
   ep?: string;
@@ -196,7 +199,7 @@ export interface UsageRow {
 
 export interface PushResult {
   company: { name: string; id: string };
-  contacts: { name: string; role: string; id: string; new: boolean; email: string }[];
+  contacts: { name: string; role: string; id: string; new: boolean; email: string; email_source?: 'research' | 'waterfall'; email_verified?: boolean }[];
   note_added: boolean;
   opportunity: { id: string; name: string; created: boolean };
   log: string[];

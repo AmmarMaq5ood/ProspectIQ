@@ -5,7 +5,7 @@ import { Errors, Notice } from '../components/ui';
 import type { SecretState } from '../types';
 
 type KeyId = 'openai' | 'apollo' | 'treg';
-const KEY_ROWS: [KeyId, string, string][] = [['apollo', 'Research database key', 'Searches, lookups and the work-email reveals. Every client without a key of their own uses this.'], ['openai', 'OpenAI key (GPT)', 'Reads plain-words requests and writes the fit lines.'], ['treg', 'treg.to key', 'Email waterfall across 100+ providers. Stored now, switched on when the waterfall ships.']];
+const KEY_ROWS: [KeyId, string, string][] = [['apollo', 'Research database key', 'Searches, lookups and the work-email reveals. Every client without a key of their own uses this.'], ['openai', 'OpenAI key (GPT)', 'Reads plain-words requests and writes the fit lines.'], ['treg', 'treg.to key', 'Email waterfall across 100+ providers for leads the research database has no email for. Switched on per client under Keys.']];
 
 /** Agency-wide settings: the one menu link for every sub-account, and the support email clients see. */
 export default function AdminSettings() {

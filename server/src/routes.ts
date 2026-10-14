@@ -14,7 +14,7 @@ import { cleanFilters, cleanIntent, filtersActive, intentFilters, normDomain } f
 import { askIntent, draftProfile, fitLines, siteText, type LlmCtx } from './llm.js';
 import { sampleCompanies, sampleEnrich, sampleLookup, samplePeople } from './samples.js';
 import { draftNote, lpOf, lpReady, lpUrl, pushProspect, roleFromTitle, sizeBucket, testConnection } from './launchpad.js';
-import { countSpent, pushCompanies, pushPeople } from './push.js';
+import { countSpent, fillEmails, pushCompanies, pushPeople, waterfallPlan } from './push.js';
 import { createFinder, describe, listFinders, nextRun, runAndSave, saveFinders } from './finders.js';
 import { usageCompute, usageRead, type UsageSummary } from './usage.js';
 import { clientDir, readJson, writeJson } from './store.js';
@@ -206,7 +206,7 @@ api.post('/push/people', requireClient('research:ask'), wrap(async (req, res) =>
   const need = people.filter((p) => p.has_email || p.email).length;
   const blocked = creditCheck(client, need);
   if (blocked) return res.status(402).json({ error: blocked, credits_left: creditsLeft(client) });
-  const r = await pushPeople(client, people, roles, { live, apollo });
+  const r = await pushPeople(client, people, roles, { live, apollo, waterfall: waterfallPlan(client, 'manual', 'research:push') });
   const credits_left = r.spent ? spendCredits(client, r.spent, 'push from the research tabs') : creditsLeft(client);
   if (live) {
     const contacts = r.results.flatMap((x) => x.contacts.map((c) => ({ name: c.name, company: x.company.name, id: c.id, email: c.email })));
@@ -251,6 +251,7 @@ api.post('/push/lookup', requireClient('research:lookup'), wrap(async (req, res)
     contacts.push(p);
   }
   if (!contacts.length) return res.status(400).json({ error: 'Tick at least one contact.' });
+  if (live) await fillEmails(client, waterfallPlan(client, 'manual', 'research:lookup'), contacts);
   const lp = lpOf(client);
   if (!lpReady(lp)) return res.status(400).json({ error: 'Launchpad is not connected for this client.' });
   const rename = (s: string) => Object.entries(renames).reduce((acc, [a, b]) => acc.split(a).join(b), s);
@@ -383,6 +384,10 @@ admin.put('/clients/:slug', (req, res) => {
   if (b.flags && typeof b.flags === 'object') {
     if (typeof b.flags.show_usage === 'boolean') c.flags.show_usage = b.flags.show_usage;
     if (typeof b.flags.show_activity === 'boolean') c.flags.show_activity = b.flags.show_activity;
+    if (typeof b.flags.email_waterfall === 'boolean' && b.flags.email_waterfall !== c.flags.email_waterfall) {
+      c.flags.email_waterfall = b.flags.email_waterfall;
+      logActivity(c.slug, { kind: 'system', title: `Email waterfall switched ${b.flags.email_waterfall ? 'on' : 'off'}`, detail: b.flags.email_waterfall ? 'Pushes and finders look up a work email for leads the research database has none for.' : '', by: 'admin', ok: true, n: 0 });
+    }
   }
   if (b.auto_push && typeof b.auto_push === 'object' && Number.isFinite(Number(b.auto_push.daily))) {
     const st = autoPushState(c);

@@ -124,7 +124,7 @@ export function PushedPeople({ data }: { data: PeoplePushed }) {
             ...r.contacts.map((c, j) => (
               <li key={`c${i}p${j}`}>
                 <div className="t"><LpLink href={c.id ? l.contacts[j] : ''}>{c.name}</LpLink></div>
-                <div className="m">{c.role}{c.new ? ' · created' : ' · updated'}{c.email ? ` · ${c.email}` : ' · no work email on file'}</div>
+                <div className="m">{c.role}{c.new ? ' · created' : ' · updated'}{c.email ? <> · {c.email}{c.email_source === 'waterfall' && <span className={`pill ${c.email_verified ? 'good' : ''}`} style={{ marginLeft: 6 }}>{c.email_verified ? 'found by the email waterfall' : 'found by the email waterfall · unverified'}</span>}</> : ' · no work email on file'}</div>
               </li>
             )),
           ];
@@ -250,11 +250,12 @@ export function Fold({ icon, title, sub, open, label = 'Set up', children }: { i
 }
 
 /** The left side of the push bar: the number, then one quiet line about what gets created. */
-export function PushCount({ n, people, nEmail, left }: { n: number; people: boolean; nEmail: number; left: number }) {
+export function PushCount({ n, people, nEmail, left, waterfall }: { n: number; people: boolean; nEmail: number; left: number; waterfall?: boolean }) {
+  const upTo = waterfall ? n : nEmail;
   return (
     <span className="cnt">
-      <span><b>{n}</b> selected{people && <> · up to <b>{nEmail}</b> credit{nEmail === 1 ? '' : 's'} of {nf(left)} left</>}</span>
-      <span className="det">{people ? 'Creates the company, the contacts with roles, a research note and the outreach deal.' : 'Creates a company record for each.'}</span>
+      <span><b>{n}</b> selected{people && <> · up to <b>{upTo}</b> credit{upTo === 1 ? '' : 's'} of {nf(left)} left</>}</span>
+      <span className="det">{people ? `Creates the company, the contacts with roles, a research note and the outreach deal.${waterfall ? ' The email waterfall looks for a work email where the research database has none.' : ''}` : 'Creates a company record for each.'}</span>
     </span>
   );
 }

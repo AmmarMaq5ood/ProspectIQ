@@ -37,10 +37,10 @@ export default function AdminCosts() {
       </div>
 
       <section className="kpis" aria-label={`Totals for ${d.label}`}>
-        <div className="kpi hero"><div className="l">Total cost · {d.label}</div><div className="v">{usd(t.total)}</div><div className="n">{priced ? `${usd(t.gpt)} GPT + ${usd(t.research)} research` : `${usd(t.gpt)} GPT · research credits not priced`}{!t.gpt_known && <> · <span className="od">some GPT calls have no price</span></>}</div></div>
+        <div className="kpi hero"><div className="l">Total cost · {d.label}</div><div className="v">{usd(t.total)}</div><div className="n">{priced ? `${usd(t.gpt)} GPT + ${usd(t.research)} research` : `${usd(t.gpt)} GPT · research credits not priced`}{t.waterfall > 0 && ` + ${usd(t.waterfall)} waterfall`}{!t.gpt_known && <> · <span className="od">some GPT calls have no price</span></>}</div></div>
         <div className="kpi"><div className="l">GPT cost</div><div className="v">{usd(t.gpt)}</div><div className="n">{nf(t.gpt_calls)} calls · {fmtN(t.tokens)} tokens</div></div>
         <div className="kpi"><div className="l">Research credits</div><div className="v"><Num value={t.credits} /></div><div className="n">{priced ? `${usd(t.research)} at ${usd(d.credit_cost)} each` : 'one per revealed work email'}</div></div>
-        <div className="kpi"><div className="l">Lookups</div><div className="v"><Num value={t.lookups} /></div><div className="n">person and company lookups</div></div>
+        <div className="kpi"><div className="l">Email waterfall</div><div className="v">{usd(t.waterfall)}</div><div className="n">{t.waterfall_calls ? `${nf(t.waterfall_calls)} lookups · ${nf(t.waterfall_found)} emails found` : 'no lookups this month'}</div></div>
         <div className="kpi"><div className="l">Searches</div><div className="v"><Num value={t.searches} /></div><div className="n">free</div></div>
         <div className="kpi"><div className="l">Biggest account</div><div className="v" style={{ fontSize: 22 }}>{t.top_client || '—'}</div><div className="n">{t.top_client ? `${t.top_share}% of the month · ${nf(t.clients_active)} account${t.clients_active === 1 ? '' : 's'} active` : 'nothing logged this month'}</div></div>
       </section>
@@ -48,15 +48,16 @@ export default function AdminCosts() {
       <section className="card" style={{ marginBottom: 12 }} aria-label="Cost by month">
         <h2>By month</h2>
         <p className="sub">The last twelve months across every account. Click a month to see it below.</p>
-        <div className="legend"><span><i className="sw-gpt" />GPT</span><span><i className="sw-research" />Research credits{priced ? '' : ' (not priced)'}</span></div>
+        <div className="legend"><span><i className="sw-gpt" />GPT</span><span><i className="sw-research" />Research credits{priced ? '' : ' (not priced)'}</span><span><i className="sw-waterfall" />Email waterfall</span></div>
         <div className="ctrend" role="img" aria-label="Monthly cost, GPT and research stacked">
           {d.months.map((m) => {
             const on = m.month === d.selected;
             const label = on || m.month === maxKey;
             return (
-              <button type="button" className={`ctrend-col${on ? ' on' : ''}`} key={m.month} onClick={() => setMonth(m.month)} title={`${m.label}: ${usd(m.total)} total · GPT ${usd(m.gpt)} · ${nf(m.credits)} research credits${priced ? ` (${usd(m.research)})` : ''}`}>
+              <button type="button" className={`ctrend-col${on ? ' on' : ''}`} key={m.month} onClick={() => setMonth(m.month)} title={`${m.label}: ${usd(m.total)} total · GPT ${usd(m.gpt)} · ${nf(m.credits)} research credits${priced ? ` (${usd(m.research)})` : ''}${m.waterfall ? ` · waterfall ${usd(m.waterfall)}` : ''}`}>
                 <span className="ctrend-val">{label && m.total > 0 ? usd(m.total) : ''}</span>
                 <span className="ctrend-stack">
+                  <span className="ctrend-seg waterfall" style={{ height: `${(m.waterfall / max) * 100}%` }} />
                   <span className="ctrend-seg research" style={{ height: `${(m.research / max) * 100}%` }} />
                   <span className="ctrend-seg gpt" style={{ height: `${(m.gpt / max) * 100}%` }} />
                 </span>
@@ -67,7 +68,7 @@ export default function AdminCosts() {
         </div>
         <details className="tbl"><summary>Table</summary>
           <table>
-            <thead><tr><th scope="col">Month</th><th scope="col" className="num">Searches</th><th scope="col" className="num">Lookups</th><th scope="col" className="num">Credits</th><th scope="col" className="num">GPT calls</th><th scope="col" className="num">Tokens</th><th scope="col" className="num">GPT</th><th scope="col" className="num">Research</th><th scope="col" className="num">Total</th></tr></thead>
+            <thead><tr><th scope="col">Month</th><th scope="col" className="num">Searches</th><th scope="col" className="num">Lookups</th><th scope="col" className="num">Credits</th><th scope="col" className="num">GPT calls</th><th scope="col" className="num">Tokens</th><th scope="col" className="num">GPT</th><th scope="col" className="num">Research</th><th scope="col" className="num">Waterfall</th><th scope="col" className="num">Total</th></tr></thead>
             <tbody>{[...d.months].reverse().map((m) => <tr key={m.month}><td>{m.label}</td><Cells l={m} priced={priced} /></tr>)}</tbody>
           </table>
         </details>
@@ -79,7 +80,7 @@ export default function AdminCosts() {
           <p className="sub">Which client's use cost what. Open an account for the split by feature.</p>
           {d.clients.length ? (
             <div className="xscroll"><table>
-              <thead><tr><th scope="col">Account</th><th scope="col" className="num">Credits</th><th scope="col" className="num">GPT calls</th><th scope="col" className="num">GPT</th>{priced && <th scope="col" className="num">Research</th>}<th scope="col" className="num">Total</th><th scope="col">Share</th></tr></thead>
+              <thead><tr><th scope="col">Account</th><th scope="col" className="num">Credits</th><th scope="col" className="num">GPT calls</th><th scope="col" className="num">GPT</th>{priced && <th scope="col" className="num">Research</th>}{t.waterfall_calls > 0 && <th scope="col" className="num">Waterfall</th>}<th scope="col" className="num">Total</th><th scope="col">Share</th></tr></thead>
               <tbody>
                 {d.clients.map((c) => (
                   <tr key={c.slug}>
@@ -95,6 +96,7 @@ export default function AdminCosts() {
                     <td className="num">{nf(c.gpt_calls)}</td>
                     <td className="num">{usd(c.gpt)}</td>
                     {priced && <td className="num">{usd(c.research)}</td>}
+                    {t.waterfall_calls > 0 && <td className="num">{usd(c.waterfall)}</td>}
                     <td className="num"><b>{usd(c.total)}</b></td>
                     <td><span className="sharebar" title={`${c.share}%`}><span style={{ width: `${c.share}%` }} /></span><span className="status" style={{ marginLeft: 6 }}>{c.share}%</span></td>
                   </tr>
@@ -108,8 +110,8 @@ export default function AdminCosts() {
           <p className="sub">What drove the spend: finders, the Ask tab, the research tabs, company lookups.</p>
           {d.features.length ? (
             <div className="xscroll"><table>
-              <thead><tr><th scope="col">Feature</th><th scope="col" className="num">Searches</th><th scope="col" className="num">Lookups</th><th scope="col" className="num">Credits</th><th scope="col" className="num">GPT calls</th><th scope="col" className="num">GPT</th>{priced && <th scope="col" className="num">Research</th>}<th scope="col" className="num">Total</th></tr></thead>
-              <tbody>{d.features.map((f) => <tr key={f.feature}><td>{f.feature}</td><td className="num">{nf(f.searches)}</td><td className="num">{nf(f.lookups)}</td><td className="num">{nf(f.credits)}</td><td className="num">{nf(f.gpt_calls)}</td><td className="num">{usd(f.gpt)}</td>{priced && <td className="num">{usd(f.research)}</td>}<td className="num"><b>{usd(f.total)}</b></td></tr>)}</tbody>
+              <thead><tr><th scope="col">Feature</th><th scope="col" className="num">Searches</th><th scope="col" className="num">Lookups</th><th scope="col" className="num">Credits</th><th scope="col" className="num">GPT calls</th><th scope="col" className="num">GPT</th>{priced && <th scope="col" className="num">Research</th>}{t.waterfall_calls > 0 && <th scope="col" className="num">Waterfall</th>}<th scope="col" className="num">Total</th></tr></thead>
+              <tbody>{d.features.map((f) => <tr key={f.feature}><td>{f.feature}</td><td className="num">{nf(f.searches)}</td><td className="num">{nf(f.lookups)}</td><td className="num">{nf(f.credits)}</td><td className="num">{nf(f.gpt_calls)}</td><td className="num">{usd(f.gpt)}</td>{priced && <td className="num">{usd(f.research)}</td>}{t.waterfall_calls > 0 && <td className="num">{usd(f.waterfall)}</td>}<td className="num"><b>{usd(f.total)}</b></td></tr>)}</tbody>
             </table></div>
           ) : <p className="empty">Nothing logged for {d.label}.</p>}
         </div>
@@ -118,7 +120,7 @@ export default function AdminCosts() {
       <section className="grid two" aria-label="By day and by model">
         <div className="card">
           <h2>Cost by day · {d.label}</h2>
-          <p className="sub">GPT plus priced research credits, per day.</p>
+          <p className="sub">GPT, priced research credits and the email waterfall, per day.</p>
           <Bars rows={d.days.map((x) => [x.day, x.total])} cls="c-single" empty={`Nothing logged for ${d.label}.`} format={usd} />
         </div>
         <div className="card">
@@ -140,7 +142,7 @@ export default function AdminCosts() {
 function Cells({ l, priced }: { l: CostLine; priced: boolean }) {
   return (
     <>
-      <td className="num">{nf(l.searches)}</td><td className="num">{nf(l.lookups)}</td><td className="num">{nf(l.credits)}</td><td className="num">{nf(l.gpt_calls)}</td><td className="num">{fmtN(l.tokens)}</td><td className="num">{usd(l.gpt)}</td><td className="num">{priced ? usd(l.research) : <span className="status">—</span>}</td><td className="num"><b>{usd(l.total)}</b></td>
+      <td className="num">{nf(l.searches)}</td><td className="num">{nf(l.lookups)}</td><td className="num">{nf(l.credits)}</td><td className="num">{nf(l.gpt_calls)}</td><td className="num">{fmtN(l.tokens)}</td><td className="num">{usd(l.gpt)}</td><td className="num">{priced ? usd(l.research) : <span className="status">—</span>}</td><td className="num">{l.waterfall_calls ? usd(l.waterfall) : <span className="status">—</span>}</td><td className="num"><b>{usd(l.total)}</b></td>
     </>
   );
 }

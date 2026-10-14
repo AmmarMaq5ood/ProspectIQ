@@ -131,6 +131,8 @@ export interface PublicClient {
   credits: Credits;
   show_usage: boolean;
   show_activity: boolean;
+  /** The email waterfall is on for this client (and a key is set): pushes may find emails the research database has none for. */
+  email_waterfall: boolean;
   support_email: string;
   auto_push: AutoPush;
 }
@@ -184,7 +186,7 @@ export interface AskResult {
 
 export interface PushResult {
   company: { name: string; id: string };
-  contacts: { name: string; role: string; id: string; new: boolean; email: string }[];
+  contacts: { name: string; role: string; id: string; new: boolean; email: string; email_source?: 'research' | 'waterfall'; email_verified?: boolean }[];
   note_added: boolean;
   opportunity: { id: string; name: string; created: boolean };
   log: string[];
@@ -203,7 +205,7 @@ export interface CompaniesPushed { results: { name: string; id: string; domain: 
 export interface UsageRow {
   t: number;
   ctx: string;
-  p: 'apollo' | 'openai';
+  p: 'apollo' | 'openai' | 'treg';
   ok: 0 | 1;
   ms: number;
   ep?: string;
@@ -224,6 +226,7 @@ export interface UsageSummary {
     searches: number; lookups: number; credits: number; results: number;
     apollo_calls: number; apollo_errors: number; gpt_calls: number; gpt_errors: number;
     tokens_in: number; tokens_out: number; cost: number; cost_known: boolean;
+    waterfall_calls?: number; waterfall_found?: number; waterfall_cost?: number;
   };
   by_day: { day: string; searches: number; credits: number; tokens: number; cost: number }[];
   by_ctx: Record<string, { searches: number; lookups: number; credits: number; gpt_calls: number; tokens: number; cost: number }>;
@@ -254,7 +257,7 @@ export interface Client {
   /** Never the values: whether each secret is set, its last four characters, and where it comes from. */
   secrets?: Record<'openai' | 'apollo' | 'treg' | 'token', SecretState>;
   credits: { monthly: number; used: number; period: string; extra: number };
-  flags: { show_usage: boolean; show_activity: boolean };
+  flags: { show_usage: boolean; show_activity: boolean; email_waterfall: boolean };
   auto_push: { daily: number; day: string; used: number };
   profile: Profile;
 }
@@ -270,7 +273,7 @@ export interface ActivityPage { rows: Activity[]; total: number; page: number; p
 
 export interface SecretState { set: boolean; hint: string; source: 'client' | 'agency' | 'env' | 'none' }
 
-export interface CostLine { gpt: number; gpt_known: boolean; credits: number; research: number; total: number; searches: number; lookups: number; gpt_calls: number; tokens: number; errors: number }
+export interface CostLine { gpt: number; gpt_known: boolean; credits: number; research: number; waterfall: number; waterfall_calls: number; waterfall_found: number; total: number; searches: number; lookups: number; gpt_calls: number; tokens: number; errors: number }
 export interface CostReport {
   months: ({ month: string; label: string } & CostLine)[];
   selected: string;

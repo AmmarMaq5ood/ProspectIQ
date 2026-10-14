@@ -14,7 +14,8 @@ import { config } from './config.js';
 import { logActivity, readActivity, readActivityAll } from './activity.js';
 import { autoPushState, dayKeyIn } from './autopush.js';
 import { costReport, featureOf, lastMonths, monthKey } from './costs.js';
-import type { Client, Finder, UsageRow } from './types.js';
+import { isFreeMail, pickEmail, waterfall } from './treg.js';
+import type { Client, Finder, Person, UsageRow } from './types.js';
 
 /** Pure checks, no network: the parser, filters, samples, schedule maths, usage, drafting. */
 
@@ -68,7 +69,7 @@ ok('next run from Sat is Mon 08:30', new Intl.DateTimeFormat('en-US', { timeZone
 ok('describe', describe({ ...fd, start: 0 }, tz) === '5 a day at 08:30, weekdays');
 ok('not twice a day', !isDue({ ...fd, last_run: mon - 60000 }, tz, mon));
 
-const client: Client = { slug: 'test', name: 'Test', access_key: 'k', enabled: true, created: 0, launchpad: { location_id: '', token: '', app_url: '', pipeline: 'Business Development', quote_stage: '', owner: '', timezone: tz, users: {} }, keys: { openai: '', openai_model: '', apollo: '', treg: '' }, credits: { monthly: 1000, used: 0, period: '2026-10', extra: 0 }, flags: { show_usage: false, show_activity: true }, auto_push: { daily: 50, day: '', used: 0 }, profile: ARTMARK_PROFILE };
+const client: Client = { slug: 'test', name: 'Test', access_key: 'k', enabled: true, created: 0, launchpad: { location_id: '', token: '', app_url: '', pipeline: 'Business Development', quote_stage: '', owner: '', timezone: tz, users: {} }, keys: { openai: '', openai_model: '', apollo: '', treg: '' }, credits: { monthly: 1000, used: 0, period: '2026-10', extra: 0 }, flags: { show_usage: false, show_activity: true, email_waterfall: false }, auto_push: { daily: 50, day: '', used: 0 }, profile: ARTMARK_PROFILE };
 process.env.DATA_DIR = process.env.DATA_DIR || './data-test';
 const run = await runFinder(client, { ...fd, per_run: 4 }, false);
 ok('finder sample run: 4 leads, nothing written', run.ok && run.pushed.length === 4 && /Sample run/.test(run.text) && run.seen.length >= 4);
@@ -147,6 +148,23 @@ ok('activity filters', readActivity('test', { kind: 'push' }).total === 3 && rea
   const feed = readActivityAll([{ slug: 'test', name: 'Test' }, { slug: 'test2', name: 'Other' }], { page: 1, per: 5 });
   ok('admin feed: merged newest first, paged, items dropped', feed.total === 10 && feed.pages === 2 && feed.rows.length === 5 && feed.rows[0].client === 'Other' && feed.rows[0].title === 'other 2' && !('items' in feed.rows[0]));
   ok('admin feed: kind filter', readActivityAll([{ slug: 'test', name: 'Test' }, { slug: 'test2', name: 'Other' }], { kind: 'push' }).total === 3);
+}
+
+/* ---- the email waterfall ---- */
+{
+  ok('waterfall: free-mail domains are rejected', isFreeMail('a@gmail.com') && !isFreeMail('a@flowserve.com'));
+  ok('waterfall: picks a verified work email on the company domain', JSON.stringify(pickEmail({ email: 'jane@gmail.com', emails: [{ email: 'jane@flowserve.com', verified: false }, { email: 'j.doe@flowserve.com', status: 'valid' }, { email: 'jane@other.io', verified: true }] }, 'flowserve.com')) === JSON.stringify({ email: 'j.doe@flowserve.com', verified: true }));
+  ok('waterfall: nothing usable', pickEmail({ email: 'x@yahoo.com' }, 'acme.com') === null && pickEmail('not an object') === null);
+  const mk = (id: string, email = '', last = 'Doe', obf = false): Person => ({ id, first: 'Jane', last, last_obf: obf, title: 'Buyer', seniority: '', linkedin: '', email, has_email: !!email, has_phone: false, city: '', has_city: false, company: 'Acme', company_id: '', domain: 'acme.com', departments: [] });
+  const people = [mk('a', 'have@acme.com'), mk('b'), mk('c'), mk('d'), mk('e', '', 'Wh***d', true)];
+  const calls: string[] = [];
+  const fake = async (_t: unknown, p: { first: string; last: string; domain: string }) => { calls.push(p.last); return p.last === 'Doe' ? { email: `jane.${calls.length}@acme.com`, verified: calls.length % 2 === 1, provider: 'test', cost: 0.01 } : null; };
+  const r = await waterfall({ slug: 'test', key: 'k', ctx: 'test' }, people, { budgetMs: 5000, maxFinds: 2, concurrency: 1, find: fake as never });
+  ok('waterfall: fills the missing ones up to the credit room, skips masked surnames', r.found === 2 && r.tried === 2 && r.skipped === 1 && people[1].email_source === 'waterfall' && people[1].email_verified === true && people[2].tags!.includes('email-unverified') && !people[3].email && people[0].email === 'have@acme.com');
+  let clock = 0;
+  const slow = async () => { clock += 20000; return { email: 'late@acme.com', verified: true, provider: 'slow', cost: 0.02 }; };
+  const r2 = await waterfall({ slug: 'test', key: 'k', ctx: 'test' }, [mk('x'), mk('y'), mk('z')], { budgetMs: 30000, maxFinds: 9, concurrency: 1, find: slow as never, now: () => clock });
+  ok('waterfall: stops at the time budget', r2.tried === 2 && r2.found === 2);
 }
 
 console.log(process.exitCode ? `FAILURES in ${n} checks` : `all ${n} checks pass`);

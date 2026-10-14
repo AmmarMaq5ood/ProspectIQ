@@ -155,7 +155,7 @@ export default function Research({ mode }: { mode: Mode }) {
                 <Pager res={res} onPage={(p) => search(filters, { page: String(p), pp: String(pp) })} />
               </div>
               <div className="pushbar">
-                <PushCount n={nSel} people={people} nEmail={nEmail} left={left} />
+                <PushCount n={nSel} people={people} nEmail={nEmail} left={left} waterfall={c.email_waterfall} />
                 {me.sample && <span className="hint">Sample mode: pushing is off.</span>}
                 {people && left <= 0 && <span className="warn">{outOfCredits(c)}</span>}
                 {!me.sample && people && left > 0 && nEmail > left && <span className="warn">Only {nf(left)} credits left this month: untick {nEmail - left}.</span>}
