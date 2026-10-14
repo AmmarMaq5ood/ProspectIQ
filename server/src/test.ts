@@ -8,7 +8,11 @@ import { usageCompute } from './usage.js';
 import { draftNote, roleFromTitle, sizeBucket } from './launchpad.js';
 import { matchesPerson, normCo } from './lpindex.js';
 import { creditCheck, creditsLeft, currentPeriod, resetDate } from './credits.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { config } from './config.js';
 import { logActivity, readActivity } from './activity.js';
+import { autoPushState, dayKeyIn } from './autopush.js';
 import type { Client, Finder, UsageRow } from './types.js';
 
 /** Pure checks, no network: the parser, filters, samples, schedule maths, usage, drafting. */
@@ -63,7 +67,7 @@ ok('next run from Sat is Mon 08:30', new Intl.DateTimeFormat('en-US', { timeZone
 ok('describe', describe({ ...fd, start: 0 }, tz) === '5 a day at 08:30, weekdays');
 ok('not twice a day', !isDue({ ...fd, last_run: mon - 60000 }, tz, mon));
 
-const client: Client = { slug: 'test', name: 'Test', access_key: 'k', enabled: true, created: 0, launchpad: { location_id: '', token: '', app_url: '', pipeline: 'Business Development', quote_stage: '', owner: '', timezone: tz, users: {} }, keys: { openai: '', openai_model: '', apollo: '' }, credits: { monthly: 1000, used: 0, period: '2026-10', extra: 0 }, flags: { show_usage: false, show_activity: true }, profile: ARTMARK_PROFILE };
+const client: Client = { slug: 'test', name: 'Test', access_key: 'k', enabled: true, created: 0, launchpad: { location_id: '', token: '', app_url: '', pipeline: 'Business Development', quote_stage: '', owner: '', timezone: tz, users: {} }, keys: { openai: '', openai_model: '', apollo: '' }, credits: { monthly: 1000, used: 0, period: '2026-10', extra: 0 }, flags: { show_usage: false, show_activity: true }, auto_push: { daily: 50, day: '', used: 0 }, profile: ARTMARK_PROFILE };
 process.env.DATA_DIR = process.env.DATA_DIR || './data-test';
 const run = await runFinder(client, { ...fd, per_run: 4 }, false);
 ok('finder sample run: 4 leads, nothing written', run.ok && run.pushed.length === 4 && /Sample run/.test(run.text) && run.seen.length >= 4);
@@ -88,9 +92,26 @@ const cr = (monthly: number, used: number, extra = 0) => ({ ...client, credits: 
 ok('credit check', creditCheck(cr(10, 10), 1).startsWith('You are out of credits. Your 10 monthly credits reset on') && creditCheck(cr(10, 8), 3).includes('Only 2 credits left') && creditCheck(cr(10, 8), 2) === '' && creditsLeft(cr(5, 9)) === 0 && creditsLeft(cr(5, 5, 3)) === 3);
 ok('period + reset date in a timezone', currentPeriod('America/New_York', Date.UTC(2026, 10, 1, 2, 0)) === '2026-10' && resetDate('America/New_York', Date.UTC(2026, 10, 1, 2, 0)).iso === '2026-11-01' && resetDate('UTC', Date.UTC(2026, 11, 15)).label === 'Jan 1, 2027');
 
+fs.rmSync(path.join(config.dataDir, 'clients', 'test', 'activity.jsonl'), { force: true }); // the counts below assume an empty log
 for (let k = 0; k < 7; k++) logActivity('test', { kind: k % 2 ? 'push' : 'finder', title: `event ${k}`, by: 'client', ok: true, credits: k, ref: k % 2 ? '' : 'f1' });
 const pg = readActivity('test', { page: 2, per: 5 });
 ok('activity paging newest first', pg.total === 7 && pg.pages === 2 && pg.page === 2 && pg.rows.map((r) => r.title).join() === 'event 1,event 0');
 ok('activity filters', readActivity('test', { kind: 'push' }).total === 3 && readActivity('test', { ref: 'f1' }).total === 4 && readActivity('test', { page: 99, per: 10 }).page === 1);
+
+/* ---- the daily cap on automatic pushes ---- */
+{
+  const tz = 'America/New_York';
+  const noon = Date.UTC(2026, 9, 14, 16, 0); // 12:00 in New York on 14 Oct
+  const base = { slug: 'x', launchpad: { timezone: tz } } as unknown as Client;
+  ok('auto push: day key in the client timezone', dayKeyIn(tz, noon) === '2026-10-14' && dayKeyIn(tz, Date.UTC(2026, 9, 15, 3, 30)) === '2026-10-14');
+  const same = autoPushState({ ...base, auto_push: { daily: 50, day: '2026-10-14', used: 12 } } as Client, noon);
+  ok('auto push: used today counts', same.used === 12 && same.left === 38 && same.daily === 50);
+  const next = autoPushState({ ...base, auto_push: { daily: 50, day: '2026-10-13', used: 50 } } as Client, noon);
+  ok('auto push: a new day starts at zero', next.used === 0 && next.left === 50);
+  const none = autoPushState({ ...base, auto_push: undefined as unknown as Client['auto_push'] } as Client, noon);
+  ok('auto push: old records default to 50', none.daily === 50 && none.left === 50);
+  const over = autoPushState({ ...base, auto_push: { daily: 50, day: '2026-10-14', used: 60 } } as Client, noon);
+  ok('auto push: never negative', over.left === 0);
+}
 
 console.log(process.exitCode ? `FAILURES in ${n} checks` : `all ${n} checks pass`);

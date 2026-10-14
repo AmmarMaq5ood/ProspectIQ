@@ -275,7 +275,7 @@ export default function Ask() {
                   <div><label className="f" htmlFor="frep">Repeat</label><select className="in" id="frep" value={fRep} onChange={(e) => setFRep(e.target.value)}><option value="daily">Every day</option><option value="weekdays">Weekdays only</option><option value="weekly">Once a week (on the start day)</option></select></div>
                 </div>
                 <div className="full checks one"><label><input type="checkbox" checked={fNotify} onChange={(e) => setFNotify(e.target.checked)} /> Notify by SMS, WhatsApp or email when new leads land (Launchpad workflow on the tag <code>leads-finder-new</code>)</label></div>
-                <div className="full actions"><button className="btn" type="submit"><Icon name="calendar" />Save as a daily finder</button><span className="hint">{isPeople ? `Spends up to ${fPer} lookup credit${fPer === 1 ? '' : 's'} per run. Times are ${c.timezone}.` : 'Company records only; no lookup credits.'}</span></div>
+                <div className="full actions"><button className="btn" type="submit"><Icon name="calendar" />Save as a daily finder</button><span className="hint">{isPeople ? `Spends up to ${fPer} lookup credit${fPer === 1 ? '' : 's'} per run. ` : 'Company records only; no lookup credits. '}All finders together add up to {c.auto_push?.daily ?? 50} leads a day. Times are {c.timezone}.</span></div>
               </form>
             </Fold>
           )}

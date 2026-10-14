@@ -182,3 +182,15 @@ details.help p + p { margin-top: 6px; }
   .fpill, details.fold > .fold-b { animation: none; }
   .finder, .rows tbody tr, .seg button, details.help summary .i, details.fold > summary .open-btn .i { transition: none; }
 }
+
+/* ---- the daily cap on automatic pushes (finders) ---- */
+.autopush { display: grid; gap: 7px; margin: 0 0 14px; padding: 11px 14px 12px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; font-size: 13px; color: var(--text-2); }
+.autopush-l { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.autopush-l .i { color: var(--primary); }
+.autopush-l b { color: var(--text); }
+.autopush-bar { height: 6px; border-radius: 999px; background: #e5e7eb; overflow: hidden; }
+.autopush-bar span { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #155eef, #4f46e5); transition: width 0.6s cubic-bezier(0.2, 0.7, 0.2, 1); }
+.autopush.out { background: var(--warn-soft); border-color: var(--warn-line); }
+.autopush.out .autopush-bar span { background: linear-gradient(90deg, #f59e0b, #ef4444); }
+.autopush-note { margin: 0; color: var(--warn-text); font-weight: 500; }
+@media (prefers-reduced-motion: reduce) { .autopush-bar span { transition: none; } }

@@ -143,6 +143,8 @@ export interface Client {
   /** Monthly credits: one per lead added to Launchpad with a work email. `monthly` resets `used` on the 1st; `extra` is this month's bonus. */
   credits: { monthly: number; used: number; period: string; extra: number };
   flags: { show_usage: boolean; show_activity: boolean };
+  /** Daily cap on what the finders push, across all of them: `used` counts leads pushed on `day` (client's timezone). */
+  auto_push: { daily: number; day: string; used: number };
   profile: Profile;
 }
 

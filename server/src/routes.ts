@@ -3,6 +3,7 @@ import path from 'node:path';
 import { config } from './config.js';
 import { createClient, deleteClient, effectiveKeys, getClient, getClientByKey, getClientByLocation, listClients, newKey, publicClient, rotateLinkSecret, saveClient, saveAgencySettings, agencySettings, universalLink } from './clients.js';
 import { addCredits, creditCheck, creditLedger, creditsLeft, creditsView, setMonthly, spendCredits } from './credits.js';
+import { autoPushState } from './autopush.js';
 import { annotateInLaunchpad, markPushed } from './lpindex.js';
 import { logActivity, readActivity } from './activity.js';
 import { DEPARTMENTS, EMAIL_STATUS, EMPLOYEE_RANGES, FUNDING, PER_PAGE, SENIORITY, enrichPerson, orgByDomain, planLimits, searchCompanies, searchPeople, type ApolloCtx } from './apollo.js';
@@ -267,7 +268,7 @@ function finderView(f: Finder, tz: string) {
 
 api.get('/finders', requireClient('finders'), (req, res) => {
   const { client } = req.piq!;
-  res.json({ finders: listFinders(client.slug).map((f) => finderView(f, client.launchpad.timezone)) });
+  res.json({ finders: listFinders(client.slug).map((f) => finderView(f, client.launchpad.timezone)), auto_push: autoPushState(client) });
 });
 
 api.post('/finders', requireClient('finders'), wrap(async (req, res) => {
@@ -369,6 +370,11 @@ admin.put('/clients/:slug', (req, res) => {
     if (typeof b.flags.show_usage === 'boolean') c.flags.show_usage = b.flags.show_usage;
     if (typeof b.flags.show_activity === 'boolean') c.flags.show_activity = b.flags.show_activity;
   }
+  if (b.auto_push && typeof b.auto_push === 'object' && Number.isFinite(Number(b.auto_push.daily))) {
+    const st = autoPushState(c);
+    c.auto_push = { daily: Math.max(0, Math.round(Number(b.auto_push.daily))), day: st.day, used: st.used };
+    logActivity(c.slug, { kind: 'credits', title: `Automatic push limit set to ${c.auto_push.daily} a day`, detail: 'Applies to the finders only; manual pushes are limited by credits.', credits: 0, by: 'admin', ok: true, n: 0 });
+  }
   if (b.profile && typeof b.profile === 'object') c.profile = cleanProfile({ ...c.profile, ...b.profile });
   saveClient(c);
   res.json({ client: c, links: menuLinks(c) });
@@ -383,7 +389,7 @@ admin.get('/clients/:slug/activity', (req, res) => {
 admin.get('/clients/:slug/credits', (req, res) => {
   const c = getClient(String(req.params.slug));
   if (!c) return res.status(404).json({ error: 'No such client.' });
-  res.json({ credits: creditsView(c), ledger: creditLedger(c.slug, 100) });
+  res.json({ credits: creditsView(c), ledger: creditLedger(c.slug, 100), auto_push: autoPushState(c) });
 });
 
 admin.post('/clients/:slug/credits', (req, res) => {
@@ -394,7 +400,7 @@ admin.post('/clients/:slug/credits', (req, res) => {
   if (Number.isFinite(add) && add !== 0) c = addCredits(c, add, String(req.body?.reason || (add > 0 ? 'bonus credits' : 'adjustment')).slice(0, 120));
   else if (Number.isFinite(monthly)) c = setMonthly(c, monthly);
   else return res.status(400).json({ error: 'Send add (bonus credits for this month) or monthly (the allowance).' });
-  res.json({ credits: creditsView(c), ledger: creditLedger(c.slug, 100) });
+  res.json({ credits: creditsView(c), ledger: creditLedger(c.slug, 100), auto_push: autoPushState(c) });
 });
 
 admin.get('/overview', (_req, res) => {

@@ -9,7 +9,7 @@ import { CreditsRing, Num, Switch } from '../components/Motion';
 import { fmtWhen, nf } from '../api';
 import Usage from './Usage';
 import Activity from './Activity';
-import type { Angle, Client, CreditEntry, Credits, FinderView, MenuLink, Profile } from '../types';
+import type { Angle, Client, CreditEntry, Credits, FinderView, MenuLink, Profile, AutoPush } from '../types';
 
 type Tab = 'launchpad' | 'profile' | 'templates' | 'credits' | 'keys' | 'access' | 'finders' | 'activity' | 'usage';
 const TABS: [Tab, string, string][] = [['launchpad', 'Launchpad connection', 'link'], ['profile', 'Profile', 'building'], ['templates', 'Templates', 'list'], ['credits', 'Credits & visibility', 'chart'], ['keys', 'Keys', 'key'], ['access', 'Access & links', 'external'], ['finders', 'Finders', 'calendar'], ['activity', 'Activity', 'clock'], ['usage', 'Usage', 'chart']];
@@ -238,11 +238,17 @@ function KeysTab({ c, set, onSave }: { c: Client; set: (fn: (x: Client) => void)
 }
 
 function CreditsTab({ c, slug, onToggleUsage, onToggleActivity }: { c: Client; slug: string; onToggleUsage: (v: boolean) => void; onToggleActivity: (v: boolean) => void }) {
-  const [cr, setCr] = useState<{ credits: Credits; ledger: CreditEntry[] } | null>(null);
+  const [cr, setCr] = useState<{ credits: Credits; ledger: CreditEntry[]; auto_push?: AutoPush } | null>(null);
   const [add, setAdd] = useState(100);
   const [monthly, setMonthly] = useState(c.credits.monthly);
+  const [daily, setDaily] = useState(c.auto_push?.daily ?? 50);
   const [err, setErr] = useState('');
-  const load = () => api<{ credits: Credits; ledger: CreditEntry[] }>(`/admin/clients/${encodeURIComponent(slug)}/credits`).then((r) => { setCr(r); setMonthly(r.credits.monthly); }).catch((e) => setErr(errText(e)));
+  const load = () => api<{ credits: Credits; ledger: CreditEntry[]; auto_push?: AutoPush }>(`/admin/clients/${encodeURIComponent(slug)}/credits`).then((r) => { setCr(r); setMonthly(r.credits.monthly); if (r.auto_push) setDaily(r.auto_push.daily); }).catch((e) => setErr(errText(e)));
+  const saveDaily = async () => {
+    setErr('');
+    try { await api(`/admin/clients/${encodeURIComponent(slug)}`, { method: 'PUT', body: { auto_push: { daily } } }); await load(); }
+    catch (e) { setErr(errText(e)); }
+  };
   useEffect(() => { load(); }, [slug]);
   const post = async (body: Record<string, unknown>) => {
     setErr('');
@@ -269,6 +275,19 @@ function CreditsTab({ c, slug, onToggleUsage, onToggleActivity }: { c: Client; s
         <div className="form-grid" style={{ marginTop: 16 }}>
           <div><label className="f" htmlFor="cmon">Monthly allowance (every month from now on)</label><div className="search-row"><input type="number" id="cmon" min={0} step={100} value={monthly} onChange={(e) => setMonthly(Math.max(0, Number(e.target.value) || 0))} /><button className="btn" type="button" onClick={() => post({ monthly })}><Icon name="check" />Set</button></div></div>
           <div><label className="f" htmlFor="cadd">Bonus credits for this month only</label><div className="search-row"><input type="number" id="cadd" min={1} step={50} value={add} onChange={(e) => setAdd(Math.max(1, Number(e.target.value) || 1))} /><button className="btn secondary" type="button" onClick={() => post({ add, reason: 'bonus credits' })}><Icon name="plus" />Add</button></div></div>
+        </div>
+      </section>
+      <section className="card" style={{ marginBottom: 12 }}>
+        <h2>Automatic pushes (finders)</h2>
+        <p className="sub">How many leads all of this client's finders together may add to Launchpad per day, in the client's timezone. Manual pushes from the research tabs are not counted; credits limit those. At the cap, finders pause until midnight and the client sees the support email.</p>
+        <div className="credits-card">
+          <dl className="kv">
+            <dt>Daily limit</dt><dd><b><Num value={cr?.auto_push?.daily ?? c.auto_push?.daily ?? 50} /></b></dd>
+            <dt>Used today</dt><dd><Num value={cr?.auto_push?.used ?? 0} /></dd>
+            <dt>Left today</dt><dd><Num value={cr?.auto_push?.left ?? (c.auto_push?.daily ?? 50)} /></dd>
+            <dt>Day</dt><dd>{cr?.auto_push?.day || '—'} ({c.launchpad.timezone})</dd>
+          </dl>
+          <div style={{ flex: 1, minWidth: 220 }}><label className="f" htmlFor="apd">Daily limit on automatic pushes</label><div className="search-row"><input type="number" id="apd" min={0} step={10} value={daily} onChange={(e) => setDaily(Math.max(0, Number(e.target.value) || 0))} /><button className="btn" type="button" onClick={saveDaily}><Icon name="check" />Set</button></div></div>
         </div>
       </section>
       <section className="card" style={{ marginBottom: 12 }}>

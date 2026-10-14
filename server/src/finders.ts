@@ -10,6 +10,7 @@ import { fitLines, type LlmCtx } from './llm.js';
 import { lpOf, lpReady } from './launchpad.js';
 import { annotateInLaunchpad } from './lpindex.js';
 import { creditsLeft, outOfCreditsText, spendCredits } from './credits.js';
+import { autoPushLimitText, autoPushSpend, autoPushState } from './autopush.js';
 import { logActivity } from './activity.js';
 import { pushCompanies, pushPeople } from './push.js';
 import type { Client, Finder, Org, Person } from './types.js';
@@ -120,7 +121,7 @@ export function describe(f: Finder, tz: string): string {
 
 /* ---- one run ---- */
 
-export interface RunResult { ok: boolean; text: string; pushed: { name: string; company: string; id: string; fit: string }[]; credits: number; spent: number; left: number; skipped: number; seen: string[] }
+export interface RunResult { ok: boolean; text: string; pushed: { name: string; company: string; id: string; fit: string }[]; credits: number; spent: number; left: number; skipped: number; seen: string[]; limited?: boolean }
 
 export async function runFinder(client: Client, f: Finder, live: boolean): Promise<RunResult> {
   const keys = effectiveKeys(client);
@@ -134,6 +135,13 @@ export async function runFinder(client: Client, f: Finder, live: boolean): Promi
   if (intent.kind === 'people' && live) {
     if (left <= 0) return { ok: false, text: `The finder did not run. ${outOfCreditsText(client)}`, pushed: [], credits: 0, spent: 0, left: 0, skipped: 0, seen: [...seen] };
     want = Math.min(want, left);
+  }
+  // The daily cap on automatic pushes, shared by every finder of this client.
+  const cap = autoPushState(client);
+  let capped = false;
+  if (live) {
+    if (cap.left <= 0) return { ok: true, text: `The finder did not push anything. ${autoPushLimitText(client)}`, pushed: [], credits: 0, spent: 0, left, skipped: 0, seen: [...seen], limited: true };
+    if (cap.left < want) { want = cap.left; capped = true; }
   }
   const picked: (Person | Org)[] = [];
   let credits = 0;
@@ -174,8 +182,10 @@ export async function runFinder(client: Client, f: Finder, live: boolean): Promi
   if (!live) return { ok: true, text: `Sample run: ${picked.length} leads would be pushed (nothing written in sample mode).`, pushed: picked.map((r) => ({ name: 'first' in r ? `${r.first} ${r.last}`.trim() : r.name, company: 'first' in r ? r.company : r.domain, id: '', fit: fits[r.id] || '' })), credits: 0, spent: 0, left, skipped, seen: seenOut };
   const ok = errors.length === 0;
   const nowLeft = creditsLeft(client);
-  const text = ok ? `${pushed.length} new lead${pushed.length === 1 ? '' : 's'} pushed into Launchpad${skipped ? `, ${skipped} already there skipped` : ''}${spent ? `, ${spent} credit${spent === 1 ? '' : 's'} used (${nowLeft} left)` : ''}.` : errors.join(' ');
-  return { ok, text, pushed, credits, spent, left: nowLeft, skipped, seen: seenOut };
+  const after = pushed.length ? autoPushSpend(client, pushed.length) : cap;
+  let text = ok ? `${pushed.length} new lead${pushed.length === 1 ? '' : 's'} pushed into Launchpad${skipped ? `, ${skipped} already there skipped` : ''}${spent ? `, ${spent} credit${spent === 1 ? '' : 's'} used (${nowLeft} left)` : ''}.` : errors.join(' ');
+  if (ok && (capped || after.left <= 0)) text += ` ${after.used} of ${after.daily} automatic pushes used today${after.left <= 0 ? ': the finders pause until tomorrow' : ''}.`;
+  return { ok, text, pushed, credits, spent, left: nowLeft, skipped, seen: seenOut, limited: after.left <= 0 };
 }
 
 export async function runAndSave(client: Client, id: string, live: boolean, by: 'finder' | 'client' = 'finder'): Promise<RunResult> {

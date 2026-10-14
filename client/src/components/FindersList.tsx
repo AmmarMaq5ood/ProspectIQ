@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, errText, fmtWhen } from '../api';
 import { useApp } from '../App';
-import type { FinderView, PeoplePushed } from '../types';
+import type { AutoPush, FinderView, PeoplePushed } from '../types';
 import { useBusy } from './Busy';
 import { Icon } from './Icon';
 import { EmptyState, Notice } from './ui';
@@ -16,10 +16,11 @@ export function FindersList({ refreshKey = 0, onChange }: { refreshKey?: number;
   const nav = useNavigate();
   const tz = me.client?.timezone || 'UTC';
   const [finders, setFinders] = useState<FinderView[] | null>(null);
+  const [ap, setAp] = useState<AutoPush | null>(null);
   const [err, setErr] = useState('');
   const [run, setRun] = useState<RunResult | null>(null);
 
-  const load = () => api<{ finders: FinderView[] }>('/finders').then((r) => { setFinders(r.finders); onChange?.(r.finders.length); }).catch((e) => setErr(errText(e)));
+  const load = () => api<{ finders: FinderView[]; auto_push?: AutoPush }>('/finders').then((r) => { setFinders(r.finders); setAp(r.auto_push || null); onChange?.(r.finders.length); }).catch((e) => setErr(errText(e)));
   useEffect(() => { load(); }, [refreshKey]);
 
   const act = async (what: string, fn: () => Promise<unknown>) => {
@@ -46,6 +47,7 @@ export function FindersList({ refreshKey = 0, onChange }: { refreshKey?: number;
           )}
         </Notice>
       )}
+      {ap && finders.length > 0 && <AutoPushMeter ap={ap} support={me.client?.support_email || ''} />}
       {finders.length === 0 ? (
         <EmptyState icon="calendar" title="No finders yet" text={<>Run a search on the Ask tab, then open <b>Make this a daily finder</b> under the results.</>}>
           <a className="btn secondary sm" onClick={() => nav('/')}><Icon name="spark" />Go to Ask</a>
@@ -78,6 +80,23 @@ export function FindersList({ refreshKey = 0, onChange }: { refreshKey?: number;
         </div>
       )}
     </>
+  );
+}
+
+/** Today's automatic pushes against the daily cap, shared by every finder. */
+function AutoPushMeter({ ap, support }: { ap: AutoPush; support: string }) {
+  const pct = ap.daily > 0 ? Math.min(100, Math.round((ap.used / ap.daily) * 100)) : 100;
+  const out = ap.left <= 0;
+  return (
+    <div className={`autopush${out ? ' out' : ''}`} role="status">
+      <div className="autopush-l">
+        <Icon name="push" />
+        <span><b>{ap.used}</b> of <b>{ap.daily}</b> automatic pushes used today</span>
+        <span className="hint">{out ? 'limit reached' : `${ap.left} left`} · resets at midnight, {ap.timezone.replace(/_/g, ' ').split('/').pop()}</span>
+      </div>
+      <div className="autopush-bar"><span style={{ width: `${pct}%` }} /></div>
+      {out && <p className="autopush-note">Today's limit is reached, so the finders pause until tomorrow.{support ? ` To raise the limit, email ${support}.` : ''}</p>}
+    </div>
   );
 }
 

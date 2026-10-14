@@ -1,3 +1,4 @@
+import { autoPushState } from './autopush.js';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { config } from './config.js';
@@ -80,6 +81,7 @@ function normalize(c: Client): Client {
   if (!old || typeof old.monthly !== 'number') c.credits = { monthly: typeof old?.total === 'number' ? old.total : 1000, used: old?.used || 0, period: '', extra: 0 };
   if (!c.flags) c.flags = { show_usage: false, show_activity: true };
   if (typeof c.flags.show_activity !== 'boolean') c.flags.show_activity = true;
+  if (!c.auto_push || typeof c.auto_push.daily !== 'number') c.auto_push = { daily: 50, day: '', used: 0 };
   delete raw.limits;
   return c;
 }
@@ -164,6 +166,7 @@ export function createClient(input: { slug: string; name: string; profile?: Part
     keys: { openai: '', openai_model: '', apollo: '' },
     credits: { monthly: 1000, used: 0, period: '', extra: 0 },
     flags: { show_usage: false, show_activity: true },
+    auto_push: { daily: 50, day: '', used: 0 },
     profile: { ...blankProfile(input.name.trim()), ...(input.profile || {}) },
   };
   return saveClient(client);
@@ -196,6 +199,7 @@ export function publicClient(client: Client) {
     show_usage: !!client.flags.show_usage,
     show_activity: client.flags.show_activity !== false,
     support_email: agencySettings().support_email || '',
+    auto_push: autoPushState(client),
   };
 }
 

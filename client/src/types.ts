@@ -132,7 +132,11 @@ export interface PublicClient {
   show_usage: boolean;
   show_activity: boolean;
   support_email: string;
+  auto_push: AutoPush;
 }
+
+/** The daily cap on what the finders push: used / left today, in the client's timezone. */
+export interface AutoPush { daily: number; used: number; left: number; day: string; timezone: string }
 
 export interface Me { client: PublicClient | null; admin: boolean; sample: boolean }
 
@@ -249,6 +253,7 @@ export interface Client {
   keys: { openai: string; openai_model: string; apollo: string };
   credits: { monthly: number; used: number; period: string; extra: number };
   flags: { show_usage: boolean; show_activity: boolean };
+  auto_push: { daily: number; day: string; used: number };
   profile: Profile;
 }
 
