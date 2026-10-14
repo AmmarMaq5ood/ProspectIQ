@@ -142,6 +142,7 @@ ok('activity filters', readActivity('test', { kind: 'push' }).total === 3 && rea
 /* ---- the admin feed across clients ---- */
 {
   fs.rmSync(path.join(config.dataDir, 'clients', 'test2', 'activity.jsonl'), { force: true });
+  { const t0 = Date.now(); while (Date.now() === t0) { /* the second client's events must be strictly newer */ } }
   for (let k = 0; k < 3; k++) logActivity('test2', { kind: 'search', title: `other ${k}`, by: 'client', ok: true, items: [{ name: 'x' }] });
   const feed = readActivityAll([{ slug: 'test', name: 'Test' }, { slug: 'test2', name: 'Other' }], { page: 1, per: 5 });
   ok('admin feed: merged newest first, paged, items dropped', feed.total === 10 && feed.pages === 2 && feed.rows.length === 5 && feed.rows[0].client === 'Other' && feed.rows[0].title === 'other 2' && !('items' in feed.rows[0]));

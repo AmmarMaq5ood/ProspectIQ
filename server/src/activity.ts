@@ -47,7 +47,8 @@ export function readActivityAll(clients: { slug: string; name: string }[], opts:
   const kind = opts.kind || '';
   const all: AdminActivity[] = [];
   for (const c of clients) {
-    for (const r of readLines<Activity>(file(c.slug), (x) => !kind || x.kind === kind)) {
+    // newest first per file before the merge: events logged in the same millisecond keep their order (sort is stable)
+    for (const r of readLines<Activity>(file(c.slug), (x) => !kind || x.kind === kind).reverse()) {
       const { items: _items, ...rest } = r;
       all.push({ ...rest, client: c.name, slug: c.slug });
     }
