@@ -2,7 +2,7 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import path from 'node:path';
 import { config } from './config.js';
 import { createClient, deleteClient, effectiveKeys, getClient, getClientByKey, getClientByLocation, listClients, newKey, publicClient, rotateLinkSecret, saveClient, saveAgencySettings, agencySettings, universalLink } from './clients.js';
-import { addCredits, creditCheck, creditLedger, creditsLeft, creditsView, setMonthly, spendCredits } from './credits.js';
+import { addCredits, creditCheck, creditLedger, creditsLeft, creditsView, restoreFull, setMonthly, spendCredits } from './credits.js';
 import { autoPushState } from './autopush.js';
 import { annotateInLaunchpad, markPushed } from './lpindex.js';
 import { logActivity, readActivity } from './activity.js';
@@ -397,9 +397,10 @@ admin.post('/clients/:slug/credits', (req, res) => {
   if (!c) return res.status(404).json({ error: 'No such client.' });
   const add = Number(req.body?.add);
   const monthly = Number(req.body?.monthly);
-  if (Number.isFinite(add) && add !== 0) c = addCredits(c, add, String(req.body?.reason || (add > 0 ? 'bonus credits' : 'adjustment')).slice(0, 120));
+  if (req.body?.restore === true) c = restoreFull(c);
+  else if (Number.isFinite(add) && add !== 0) c = addCredits(c, add, String(req.body?.reason || (add > 0 ? 'bonus credits' : 'adjustment')).slice(0, 120));
   else if (Number.isFinite(monthly)) c = setMonthly(c, monthly);
-  else return res.status(400).json({ error: 'Send add (bonus credits for this month) or monthly (the allowance).' });
+  else return res.status(400).json({ error: 'Send restore (back to the full allowance), add (bonus credits for this month) or monthly (the allowance).' });
   res.json({ credits: creditsView(c), ledger: creditLedger(c.slug, 100), auto_push: autoPushState(c) });
 });
 

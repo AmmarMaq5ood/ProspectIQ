@@ -94,6 +94,19 @@ export function setMonthly(client: Client, monthly: number, by = 'admin'): Clien
   return c;
 }
 
+/** Back to 100% of the monthly allowance: used goes to zero, this month's bonus is cleared. */
+export function restoreFull(client: Client, by = 'admin'): Client {
+  const c = fresh(client);
+  const before = creditsLeft(c);
+  c.credits.used = 0;
+  c.credits.extra = 0;
+  saveClient(c);
+  const delta = creditsLeft(c) - before;
+  appendLine(file(c.slug), { t: Date.now(), delta, reason: `restored to the full monthly allowance (${c.credits.monthly.toLocaleString('en-US')})`, by, left: creditsLeft(c) } satisfies CreditEntry);
+  logActivity(c.slug, { kind: 'credits', title: `Credits restored to the full monthly allowance (${c.credits.monthly.toLocaleString('en-US')})`, detail: `${delta >= 0 ? '+' : ''}${delta.toLocaleString('en-US')} · ${creditsLeft(c).toLocaleString('en-US')} left this month`, by: by as 'admin', ok: true });
+  return c;
+}
+
 export function creditLedger(slug: string, limit = 60): CreditEntry[] {
   return readLines<CreditEntry>(file(slug), () => true).slice(-limit).reverse();
 }

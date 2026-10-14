@@ -275,6 +275,10 @@ function CreditsTab({ c, slug, onToggleUsage, onToggleActivity }: { c: Client; s
         <div className="form-grid" style={{ marginTop: 16 }}>
           <div><label className="f" htmlFor="cmon">Monthly allowance (every month from now on)</label><div className="search-row"><input type="number" id="cmon" min={0} step={100} value={monthly} onChange={(e) => setMonthly(Math.max(0, Number(e.target.value) || 0))} /><button className="btn" type="button" onClick={() => post({ monthly })}><Icon name="check" />Set</button></div></div>
           <div><label className="f" htmlFor="cadd">Bonus credits for this month only</label><div className="search-row"><input type="number" id="cadd" min={1} step={50} value={add} onChange={(e) => setAdd(Math.max(1, Number(e.target.value) || 1))} /><button className="btn secondary" type="button" onClick={() => post({ add, reason: 'bonus credits' })}><Icon name="plus" />Add</button></div></div>
+          <div className="full actions" style={{ marginTop: 2 }}>
+            <button className="btn secondary" type="button" disabled={cur.used === 0 && !cur.extra} onClick={() => { if (confirm(`Restore this client to the full allowance of ${nf(cur.monthly)} credits? Used goes back to zero and any bonus for this month is cleared.`)) post({ restore: true }); }}><Icon name="refresh" />Top up to the full allowance ({nf(cur.monthly)})</button>
+            <span className="hint">Puts the balance back to 100% of the monthly allowance, for example after test pushes. Shows in the ledger and the activity log.</span>
+          </div>
         </div>
       </section>
       <section className="card" style={{ marginBottom: 12 }}>
