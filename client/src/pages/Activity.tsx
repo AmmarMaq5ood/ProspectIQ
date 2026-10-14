@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { api, errText, fmtWhen, lpContactHref, nf } from '../api';
 import { useApp } from '../App';
 import { Icon } from '../components/Icon';
-import { Errors, Pager, PerPage } from '../components/ui';
+import { Errors, Help, Pager, PerPage, ResultsHead } from '../components/ui';
 import type { Activity as Act, ActivityPage } from '../types';
 
 const KINDS: [string, string][] = [['', 'Everything'], ['finder', 'Finder runs'], ['push', 'Pushes'], ['search', 'Searches'], ['lookup', 'Lookups'], ['credits', 'Credits']];
@@ -38,10 +38,9 @@ export default function Activity({ adminSlug, timezone, client }: { adminSlug?: 
     <>
       <Errors errors={err ? [err] : []} />
       <section className="card">
-        <div className="rsum">
-          <span><b>{data ? nf(data.total) : '…'}</b> {kind ? LABEL[kind] + (data && data.total === 1 ? '' : 's') : 'events'}{ref && <> · one finder <a onClick={() => go({ ref: '', page: '' })} style={{ cursor: 'pointer' }}>(show all)</a></>}</span>
+        <ResultsHead total={data ? data.total : 0} noun={kind ? LABEL[kind] + (data && data.total === 1 ? '' : 's') : 'events'} summary={ref ? <>one finder <a onClick={() => go({ ref: '', page: '' })} style={{ cursor: 'pointer' }}>(show all)</a></> : undefined}>
           <PerPage value={per} options={[10, 25, 50, 100]} onChange={(n) => go({ per: String(n), page: '' })} />
-        </div>
+        </ResultsHead>
         <div className="sugg" style={{ margin: '0 0 14px' }}>
           {KINDS.map(([k, label]) => <button type="button" key={k} className={k === kind ? 'on' : ''} onClick={() => go({ kind: k, page: '' })}>{label}</button>)}
         </div>
@@ -54,7 +53,7 @@ export default function Activity({ adminSlug, timezone, client }: { adminSlug?: 
         )}
         {data && data.pages > 1 && <Pager res={{ rows: data.rows, total: data.total, page: data.page, per_page: data.per, pages: data.pages }} onPage={(p) => go({ page: String(p) })} />}
       </section>
-      {!adminSlug && <p className="foot">Credits are used only when a lead is added to Launchpad as a new contact with a work email. Searches, lookups and leads already in Launchpad use none.</p>}
+      {!adminSlug && <Help title="How credits are counted"><p>Credits are used only when a lead is added to Launchpad as a new contact with a work email. Searches, lookups and leads already in Launchpad use none.</p></Help>}
     </>
   );
 }

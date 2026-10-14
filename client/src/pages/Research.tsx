@@ -5,7 +5,7 @@ import { useApp } from '../App';
 import { useBusy } from '../components/Busy';
 import { Chips } from '../components/Chips';
 import { Icon } from '../components/Icon';
-import { Checks, Errors, Field, Group, InLp, LpFilter, Pager, PerPage, PushedCompanies, PushedPeople, Range } from '../components/ui';
+import { CardHead, Checks, Errors, Field, Group, Help, InLp, Pager, PerPage, PushCount, PushedCompanies, PushedPeople, Range, ResultsHead, SelectBar } from '../components/ui';
 import { roleFromTitle } from '../roles';
 import { filtersToQuery } from './Ask';
 import type { CompaniesPushed, Filters, Org, PeoplePushed, Person, SearchResult } from '../types';
@@ -125,12 +125,11 @@ export default function Research({ mode }: { mode: Mode }) {
         <section className="results">
           {!res ? (
             <div className="card">
-              <h2>{people ? 'Find people' : mode === 'companies' ? 'Find companies' : 'Map an industry'}</h2>
-              <p className="sub">{people
+              <CardHead icon={people ? 'people' : mode === 'companies' ? 'building' : 'chart'} title={people ? 'Find people' : mode === 'companies' ? 'Find companies' : 'Map an industry'} sub={people
                 ? 'Pick titles, seniority, departments, locations and company filters on the left. The search is free; a lookup credit is spent only when a pushed person\'s work email is found.'
                 : mode === 'companies'
                   ? 'Search by name, industry keywords, headquarters, size, revenue, funding or technologies. Push companies as records, or jump to the people at any of them.'
-                  : 'Start from what an industry makes (industry keywords), add where and how big, and see the companies in it with a size and headquarters breakdown. Then find the buyers at them in one click.'}</p>
+                  : 'Start from what an industry makes (industry keywords), add where and how big, and see the companies in it with a size and headquarters breakdown. Then find the buyers at them in one click.'} />
               <span className="f">Start from an example</span>
               <div className="sugg" style={{ marginTop: 4 }}>
                 {presets.map((p) => <a className="btn secondary sm" key={p.label} onClick={() => search({ ...emptyFilters(), ...p.f })}>{p.label}</a>)}
@@ -140,28 +139,23 @@ export default function Research({ mode }: { mode: Mode }) {
             <>
               {mode === 'industries' && <IndustrySummary res={res as SearchResult<Org>} okw={filters.okw} />}
               <div className="card">
-                <div className="rsum">
-                  <span><b>{nf(res.total)}</b> {people ? 'people' : 'companies'} match</span>
-                  {people && <span className="hint">Surnames are masked until the push, which fills in the full name, LinkedIn and the work email where one exists.</span>}
+                <ResultsHead total={res.total} noun={people ? 'people' : 'companies'} summary={people ? 'surnames are masked until the push' : undefined}>
                   <PerPage value={pp} options={options.per_page} onChange={(n) => search(filters, { pp: String(n) })} />
-                </div>
+                </ResultsHead>
                 {mode === 'industries' && rows.length > 0 && (
                   <div className="rowtools">
                     <a className="btn secondary sm" onClick={() => nav(`/people?${filtersToQuery({ oids: rows.map((r) => r.id), sen: ['vp', 'head', 'director', 'manager'], dep: ['master_operations', 'supply_chain', 'logistics', 'quality_management'] })}`)}><Icon name="people" />Find buyers at these {rows.length} companies</a>
                     <span className="hint">Operations, supply chain, logistics and quality, manager and up. Change anything on the People tab.</span>
                   </div>
                 )}
-                <div className="filters-row">
-                  <p className="sel-line" style={{ margin: 0 }}>Select <a onClick={() => pick('all')}>all on this page</a> · <a onClick={() => pick('none')}>none</a>{people && <> · <a onClick={() => pick('email')}>only those with an email</a>{nLp > 0 && <> · <a onClick={() => pick('new')}>only new to Launchpad</a></>}</>}</p>
-                  <LpFilter n={nLp} hide={hideLp} onChange={setHideLp} />
-                </div>
+                <SelectBar onPick={pick} email={people} newOnly={people && nLp > 0} nLp={nLp} hide={hideLp} onHide={setHideLp} />
                 {people
                   ? <PeopleTable rows={rows as Person[]} picks={picks} toggle={toggle} roles={roles} setRole={(id, v) => setRoles((m) => ({ ...m, [id]: v }))} roleList={c.profile.roles} onAll={(on) => pick(on ? 'all' : 'none')} />
                   : <CompaniesTable rows={rows as Org[]} picks={picks} toggle={toggle} onAll={(on) => pick(on ? 'all' : 'none')} onPeople={(d) => nav(peopleAtHref(d))} />}
                 <Pager res={res} onPage={(p) => search(filters, { page: String(p), pp: String(pp) })} />
               </div>
               <div className="pushbar">
-                <span className="cnt"><b>{nSel}</b> selected{people ? <> · uses up to <b>{nEmail}</b> of your <b>{nf(left)}</b> credits this month · creates the company, the contacts with roles, a research note and the outreach deal</> : ' · creates a company record for each'}</span>
+                <PushCount n={nSel} people={people} nEmail={nEmail} left={left} />
                 {me.sample && <span className="hint">Sample mode: pushing is off.</span>}
                 {people && left <= 0 && <span className="warn">{outOfCredits(c)}</span>}
                 {!me.sample && people && left > 0 && nEmail > left && <span className="warn">Only {nf(left)} credits left this month: untick {nEmail - left}.</span>}
@@ -171,7 +165,10 @@ export default function Research({ mode }: { mode: Mode }) {
           )}
         </section>
       </div>
-      <p className="foot">Searches are free and show first name, masked surname, title and company. Pushing looks each ticked person up for the full name, LinkedIn and the work email; a lookup credit is spent only when an email comes back. Pushed people land in Contacts under their company with Role, Industry, Company Size and LinkedIn URL, a research note on the first contact of each company, and a "{c.pipeline || 'Business Development'}" outreach deal at its first stage. Re-pushing updates the same records.</p>
+      <Help title="How searching and pushing work">
+        <p>Searches are free and show first name, masked surname, title and company. Pushing looks each ticked person up for the full name, LinkedIn and the work email; a lookup credit is spent only when an email comes back.</p>
+        <p>Pushed people land in Contacts under their company with Role, Industry, Company Size and LinkedIn URL, a research note on the first contact of each company, and a "{c.pipeline || 'Business Development'}" outreach deal at its first stage. Re-pushing updates the same records.</p>
+      </Help>
     </>
   );
 }
@@ -254,7 +251,7 @@ function PeopleTable({ rows, picks, toggle, roles, setRole, roleList, onAll }: {
         <thead><tr><th scope="col"><AllBox rows={rows} picks={picks} onAll={onAll} /></th><th scope="col">Name</th><th scope="col">Title</th><th scope="col">Company</th><th scope="col">On file</th><th scope="col">Role in Launchpad</th></tr></thead>
         <tbody>
           {rows.map((p) => (
-            <tr key={p.id} className={p.in_lp ? 'dim' : ''}>
+            <tr key={p.id} className={`${p.in_lp ? 'dim' : ''}${picks.has(p.id) ? ' sel' : ''}`.trim()}>
               <td><input type="checkbox" checked={picks.has(p.id)} onChange={(e) => toggle(p.id, e.target.checked)} aria-label={`Select ${fullName(p)}`} /></td>
               <td><span className="nm">{fullName(p)}</span>{p.city && <span className="st">{p.city}</span>}{p.email && <span className="st">{p.email}</span>}</td>
               <td>{p.title}</td>
@@ -276,7 +273,7 @@ function CompaniesTable({ rows, picks, toggle, onAll, onPeople }: { rows: Org[];
         <thead><tr><th scope="col"><AllBox rows={rows} picks={picks} onAll={onAll} /></th><th scope="col">Company</th><th scope="col">Industry</th><th scope="col" className="num">Size</th><th scope="col">Headquarters</th><th scope="col" className="num">Revenue</th><th scope="col" className="num">Founded</th><th scope="col">Links</th><th scope="col"></th></tr></thead>
         <tbody>
           {rows.map((o) => (
-            <tr key={o.id}>
+            <tr key={o.id} className={picks.has(o.id) ? 'sel' : ''}>
               <td><input type="checkbox" checked={picks.has(o.id)} onChange={(e) => toggle(o.id, e.target.checked)} aria-label={`Select ${o.name}`} /></td>
               <td><div className="co">{o.logo && <img className="logo" src={o.logo} alt="" loading="lazy" />}<div><span className="nm">{o.name}</span><span className="st">{o.domain}</span></div></div></td>
               <td>{o.industry ? cap(o.industry) : <span className="status">—</span>}</td>

@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import './styles.css';
 import './extra.css';
+import './polish.css';
 import { BASE } from './api';
 
 createRoot(document.getElementById('root')!).render(

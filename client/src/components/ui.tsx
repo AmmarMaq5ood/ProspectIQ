@@ -4,6 +4,7 @@ import { lpContactHref, nf, peopleAtHref } from '../api';
 import { useApp } from '../App';
 import type { CompaniesPushed, PeoplePushed, Person, SearchResult } from '../types';
 import { Icon } from './Icon';
+import { Num } from './Motion';
 
 /* ---- small shared pieces ---- */
 
@@ -150,5 +151,110 @@ export function PushedCompanies({ data }: { data: CompaniesPushed }) {
       </ul>
       {data.errors.map((e, i) => <p key={i}>{e}</p>)}
     </Notice>
+  );
+}
+
+/* ---- organisation pass (14 Oct 2026): shared layout pieces ---- */
+
+/** Card header: an icon, the title, one line of help, actions on the right. */
+export function CardHead({ icon, title, sub, children }: { icon?: string; title: ReactNode; sub?: ReactNode; children?: ReactNode }) {
+  return (
+    <div className="card-h">
+      {icon && <span className="ic"><Icon name={icon} /></span>}
+      <div className="tt"><h2>{title}</h2>{sub && <span className="sub">{sub}</span>}</div>
+      {children && <div className="act">{children}</div>}
+    </div>
+  );
+}
+
+/** Results header: the count is the headline, the summary follows, actions sit right. */
+export function ResultsHead({ total, noun, summary, children }: { total: number; noun: string; summary?: ReactNode; children?: ReactNode }) {
+  return (
+    <div className="rhead">
+      <div className="n"><b className={total ? '' : 'zero'}><Num value={total} /></b><span className="noun">{noun}</span>{summary && <span className="sum">{summary}</span>}</div>
+      {children && <div className="act">{children}</div>}
+    </div>
+  );
+}
+
+export type Facet = 'title' | 'people' | 'industry' | 'place' | 'size' | 'tech' | 'not' | 'other';
+export interface CritGroup { label: string; facet: Facet; values: string[] }
+
+/** "Understood as": the parsed request, grouped by facet and colour-coded. */
+export function Criteria({ groups, edit }: { groups: CritGroup[]; edit?: ReactNode }) {
+  const live = groups.filter((g) => g.values.length);
+  const n = live.reduce((s, g) => s + g.values.length, 0);
+  return (
+    <div className="crit" aria-label="Search criteria">
+      <div className="crit-h"><Icon name="spark" />Understood as{n > 0 && <span className="cnt">{n} condition{n === 1 ? '' : 's'}</span>}{edit && <span className="edit">{edit}</span>}</div>
+      {live.length ? live.map((g) => (
+        <div className="crit-g" key={g.label}>
+          <span className="crit-l">{g.label}</span>
+          <span className="crit-v">{g.values.map((v, i) => <span className={`fpill f-${g.facet}`} key={`${v}${i}`}>{v}</span>)}</span>
+        </div>
+      )) : <span className="none">Nothing specific: the words were searched as keywords.</span>}
+    </div>
+  );
+}
+
+/** The selection toolbar: real buttons, and the "hide already in Launchpad" switch on the right. */
+export function SelectBar({ onPick, email, newOnly, nLp, hide, onHide }: { onPick: (m: 'all' | 'none' | 'email' | 'new') => void; email?: boolean; newOnly?: boolean; nLp?: number; hide?: boolean; onHide?: (v: boolean) => void }) {
+  return (
+    <div className="selbar">
+      <span className="lbl">Select</span>
+      <span className="seg" role="group" aria-label="Select rows">
+        <button type="button" onClick={() => onPick('all')}>All on this page</button>
+        <button type="button" onClick={() => onPick('none')}>None</button>
+        {email && <button type="button" onClick={() => onPick('email')}>With an email</button>}
+        {newOnly && <button type="button" onClick={() => onPick('new')}>New to Launchpad</button>}
+      </span>
+      {onHide && typeof nLp === 'number' && <LpFilter n={nLp} hide={!!hide} onChange={onHide} />}
+    </div>
+  );
+}
+
+/** An empty state that says what to do next. */
+export function EmptyState({ icon = 'search', title, text, children }: { icon?: string; title: string; text?: ReactNode; children?: ReactNode }) {
+  return (
+    <div className="emptys" role="status">
+      <span className="ic"><Icon name={icon} /></span>
+      <h3>{title}</h3>
+      {text && <p>{text}</p>}
+      {children && <div className="act">{children}</div>}
+    </div>
+  );
+}
+
+/** The help footer: collapsed until wanted. */
+export function Help({ title = 'How this works', children }: { title?: string; children: ReactNode }) {
+  return (
+    <details className="help">
+      <summary><Icon name="chevron" />{title}</summary>
+      <div>{children}</div>
+    </details>
+  );
+}
+
+/** A card that stays folded until opened: a header row with a "Set up" button. */
+export function Fold({ icon, title, sub, open, label = 'Set up', children }: { icon: string; title: ReactNode; sub?: ReactNode; open?: boolean; label?: string; children: ReactNode }) {
+  return (
+    <details className="card fold" open={open}>
+      <summary>
+        <span className="ic"><Icon name={icon} /></span>
+        <div className="tt"><h2>{title}</h2>{sub && <span className="sub">{sub}</span>}</div>
+        <span className="open-btn">{label}<Icon name="chevron" /></span>
+      </summary>
+      <div className="fold-b">{children}</div>
+    </details>
+  );
+}
+
+/** The left side of the push bar: the number, then one quiet line about what gets created. */
+export function PushCount({ n, people, nEmail, left }: { n: number; people: boolean; nEmail: number; left: number }) {
+  return (
+    <span className="cnt">
+      <span><b>{n}</b> selected{people && <> · up to <b>{nEmail}</b> credit{nEmail === 1 ? '' : 's'} of {nf(left)} left</>}</span>
+      <span className="det">{people ? 'Creates the company, the contacts with roles, a research note and the outreach deal.' : 'Creates a company record for each.'}</span>
+    </span>
   );
 }

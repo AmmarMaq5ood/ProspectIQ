@@ -5,7 +5,7 @@ import { useApp } from '../App';
 import { useBusy } from '../components/Busy';
 import { FindersList } from '../components/FindersList';
 import { Icon } from '../components/Icon';
-import { Errors, InLp, LpFilter, Notice, Pager, PerPage, PushedCompanies, PushedPeople } from '../components/ui';
+import { CardHead, Criteria, EmptyState, Errors, Fold, Help, InLp, LpFilter, Notice, Pager, PerPage, PushCount, PushedCompanies, PushedPeople, ResultsHead, SelectBar, type CritGroup } from '../components/ui';
 import { roleFromTitle } from '../roles';
 import type { AskResult, CompaniesPushed, Kind, Org, PeoplePushed, Person, RecentSearch } from '../types';
 
@@ -79,6 +79,7 @@ export default function Ask() {
     setParams(p);
   };
   const submit = (e: FormEvent) => { e.preventDefault(); if (text.trim()) go(text.trim()); };
+  const rephrase = () => { const el = inputRef.current; if (el) { el.focus(); el.select(); window.scrollTo({ top: 0, behavior: 'smooth' }); } };
 
   const allRows = res?.result.rows || [];
   const kind: Kind = res?.kind || 'people';
@@ -134,27 +135,29 @@ export default function Ask() {
     }
   };
 
-  /* "understood as" chips */
-  const chips: [string, string][] = [];
+  /* "understood as", grouped by facet */
+  const groups: CritGroup[] = [];
   if (res) {
     const i = res.intent;
-    i.titles.forEach((x) => chips.push(['Title', x]));
-    i.seniorities.forEach((x) => chips.push(['Seniority', options.seniority[x] || x]));
-    i.departments.forEach((x) => chips.push(['Dept', x]));
-    i.industry_keywords.forEach((x) => chips.push(['Industry', x]));
-    [...i.person_locations, ...i.company_locations].forEach((x) => chips.push(['Location', x]));
-    i.exclude_locations.forEach((x) => chips.push(['Not in', x]));
-    i.employee_ranges.forEach((x) => chips.push(['Size', options.employee_ranges[x] || x]));
-    if (i.revenue_min || i.revenue_max) chips.push(['Revenue', (i.revenue_min ? money(i.revenue_min) : '') + (i.revenue_max ? ` to ${money(i.revenue_max)}` : '+')]);
-    i.technologies.forEach((x) => chips.push(['Uses', x]));
-    if (i.keywords) chips.push(['Keywords', i.keywords]);
+    groups.push({ label: 'Titles', facet: 'title', values: i.titles });
+    groups.push({ label: 'Seniority', facet: 'people', values: i.seniorities.map((x) => options.seniority[x] || x) });
+    groups.push({ label: 'Department', facet: 'people', values: i.departments });
+    groups.push({ label: 'Industry', facet: 'industry', values: i.industry_keywords });
+    groups.push({ label: 'Companies', facet: 'industry', values: [...(i.company_name ? [i.company_name] : []), ...(i.company_domains || [])] });
+    groups.push({ label: 'Location', facet: 'place', values: [...i.person_locations, ...i.company_locations] });
+    groups.push({ label: 'Not in', facet: 'not', values: i.exclude_locations });
+    groups.push({ label: 'Company size', facet: 'size', values: i.employee_ranges.map((x) => options.employee_ranges[x] || x) });
+    groups.push({ label: 'Revenue', facet: 'size', values: i.revenue_min || i.revenue_max ? [(i.revenue_min ? money(i.revenue_min) : '') + (i.revenue_max ? ` to ${money(i.revenue_max)}` : '+')] : [] });
+    groups.push({ label: 'Uses', facet: 'tech', values: i.technologies });
+    groups.push({ label: 'Keywords', facet: 'other', values: i.keywords ? [i.keywords] : [] });
   }
   const refineHref = res ? `/${kind}?${filtersToQuery(res.filters)}` : '';
+  const editBtn = <a className="btn secondary sm" onClick={() => nav(refineHref)}><Icon name="filter" />Edit filters</a>;
 
   const pill = (autofocus: boolean) => (
     <form className="ask-pill" onSubmit={submit}>
       <span className="ask-spark"><Icon name="spark" /></span>
-      <input ref={autofocus ? inputRef : undefined} type="text" value={text} onChange={(e) => setText(e.target.value)} placeholder="Ask for leads… e.g. purchasing managers at valve makers in Texas with 100 to 1,000 employees" autoComplete="off" aria-label="What leads are you looking for" autoFocus={autofocus} />
+      <input ref={inputRef} type="text" value={text} onChange={(e) => setText(e.target.value)} placeholder="Ask for leads… e.g. purchasing managers at valve makers in Texas with 100 to 1,000 employees" autoComplete="off" aria-label="What leads are you looking for" autoFocus={autofocus} />
       <button className="ask-send" type="submit" aria-label="Find leads" title="Find leads" disabled={busy.active}>{busy.active ? <span className="spin" /> : <Icon name="arrow-up" />}</button>
     </form>
   );
@@ -222,22 +225,14 @@ export default function Ask() {
       {res && (
         <>
           <div className="card">
-            <div className="rsum">
-              <span><b>{nf(res.result.total)}</b> {isPeople ? 'people' : 'companies'} match · {res.intent.summary}</span>
-              <a className="btn ghost sm" onClick={() => nav(refineHref)}><Icon name="filter" />Refine with all filters</a>
+            <ResultsHead total={res.result.total} noun={isPeople ? 'people' : 'companies'} summary={res.intent.summary}>
+              {editBtn}
               <PerPage value={pp} options={options.per_page} onChange={(n) => go(q, { pp: String(n) })} />
-            </div>
-            <div className="ask-under">
-              <span><Icon name="spark" /> Understood as:</span>
-              {chips.map(([k, v], i) => <span className="pill blue" key={i}>{k}: {v}</span>)}
-              {!chips.length && <span className="pill">nothing specific, searched the words as keywords</span>}
-            </div>
+            </ResultsHead>
+            <Criteria groups={groups} />
             {rows.length ? (
               <>
-                <div className="filters-row">
-                  <p className="sel-line" style={{ margin: 0 }}>Select <a onClick={() => pick('all')}>all on this page</a> · <a onClick={() => pick('none')}>none</a>{isPeople && <> · <a onClick={() => pick('email')}>only those with an email</a>{nLp > 0 && <> · <a onClick={() => pick('new')}>only new to Launchpad</a></>}</>}</p>
-                  <LpFilter n={nLp} hide={hideLp} onChange={setHideLp} />
-                </div>
+                <SelectBar onPick={pick} email={isPeople} newOnly={isPeople && nLp > 0} nLp={nLp} hide={hideLp} onHide={setHideLp} />
                 <div className="cards">
                   {rows.map((r) => (
                     <label className={`lead${inLp(r) ? ' dim' : ''}`} key={r.id}>
@@ -248,11 +243,20 @@ export default function Ask() {
                 </div>
                 <Pager res={res.result} onPage={(p) => go(q, { page: String(p), pp: String(pp) })} />
               </>
-            ) : <p className="empty">Nothing matched. Try fewer conditions, or <a onClick={() => nav(refineHref)}>adjust the filters</a>.</p>}
+            ) : allRows.length ? (
+              <EmptyState icon="people" title="Everyone on this page is already in Launchpad" text="They are hidden by the switch below. Show them, or move to the next page.">
+                <LpFilter n={nLp} hide={hideLp} onChange={setHideLp} />
+              </EmptyState>
+            ) : (
+              <EmptyState icon="search" title="No one matched all of these conditions" text="The more conditions a request has, the fewer people fit them all. Try dropping the company size or widening the location, or adjust each condition in the filters.">
+                {editBtn}
+                <a className="btn ghost sm" onClick={rephrase}><Icon name="spark" />Rephrase the request</a>
+              </EmptyState>
+            )}
           </div>
           {rows.length > 0 && (
             <div className="pushbar">
-              <span className="cnt"><b>{nSel}</b> selected{isPeople ? <> · uses up to <b>{nEmail}</b> of your <b>{nf(left)}</b> credits this month · creates the company, the contacts with roles, a research note and the outreach deal</> : ' · creates a company record for each'}</span>
+              <PushCount n={nSel} people={isPeople} nEmail={nEmail} left={left} />
               {me.sample && <span className="hint">Sample mode: pushing is off.</span>}
               {isPeople && left <= 0 && <span className="warn">{outOfCredits(c)}</span>}
               {!me.sample && isPeople && left > 0 && nEmail > left && <span className="warn">Only {nf(left)} credits left this month: untick {nEmail - left}.</span>}
@@ -260,33 +264,35 @@ export default function Ask() {
             </div>
           )}
 
-          <section className="card" style={{ marginTop: 16 }}>
-            <h2>Create and forget: make this a daily finder</h2>
-            <p className="sub">Every day it runs this search, skips anyone already in Launchpad, looks up the new ones and adds them to Launchpad with a note saying why they fit. A Launchpad workflow on the tag <code>leads-finder-new</code> sends the "found N new leads" message by SMS, WhatsApp or email.</p>
-            <form className="form-grid" onSubmit={saveFinder}>
-              <div className="full"><label className="f" htmlFor="fname">Name</label><input type="text" id="fname" value={fName} maxLength={160} onChange={(e) => setFName(e.target.value)} /></div>
-              <div className="sched">
-                <div><label className="f" htmlFor="fper">New leads per run</label><input type="number" id="fper" value={fPer} min={1} max={100} step={1} inputMode="numeric" onChange={(e) => setFPer(Math.max(1, Math.min(100, Number(e.target.value) || 1)))} /></div>
-                <div><label className="f" htmlFor="fstart">Start date</label><input type="date" id="fstart" value={fStart} min={todayIn(c.timezone)} onChange={(e) => setFStart(e.target.value)} /></div>
-                <div><label className="f" htmlFor="ftime">Run time</label><input type="time" id="ftime" value={fTime} step={300} onChange={(e) => setFTime(e.target.value)} /></div>
-                <div><label className="f" htmlFor="frep">Repeat</label><select className="in" id="frep" value={fRep} onChange={(e) => setFRep(e.target.value)}><option value="daily">Every day</option><option value="weekdays">Weekdays only</option><option value="weekly">Once a week (on the start day)</option></select></div>
-              </div>
-              <div className="full checks one"><label><input type="checkbox" checked={fNotify} onChange={(e) => setFNotify(e.target.checked)} /> Notify by SMS / WhatsApp / email through the Launchpad workflow (tag leads-finder-new)</label></div>
-              <div className="full actions"><button className="btn secondary" type="submit"><Icon name="calendar" />Save as a daily finder</button><span className="hint">{isPeople ? `Costs up to the chosen number of lookup credits per run. Times are ${c.timezone}.` : 'Company records only; no lookup credits.'}</span></div>
-            </form>
-          </section>
+          {allRows.length > 0 && (
+            <Fold icon="calendar" title="Make this a daily finder" sub="Runs this search every day, skips anyone already in Launchpad and adds the new leads with a note on why they fit." label="Set up">
+              <form className="form-grid" onSubmit={saveFinder}>
+                <div className="full"><label className="f" htmlFor="fname">Name</label><input type="text" id="fname" value={fName} maxLength={160} onChange={(e) => setFName(e.target.value)} /></div>
+                <div className="sched">
+                  <div><label className="f" htmlFor="fper">New leads per run</label><input type="number" id="fper" value={fPer} min={1} max={100} step={1} inputMode="numeric" onChange={(e) => setFPer(Math.max(1, Math.min(100, Number(e.target.value) || 1)))} /></div>
+                  <div><label className="f" htmlFor="fstart">Start date</label><input type="date" id="fstart" value={fStart} min={todayIn(c.timezone)} onChange={(e) => setFStart(e.target.value)} /></div>
+                  <div><label className="f" htmlFor="ftime">Run time</label><input type="time" id="ftime" value={fTime} step={300} onChange={(e) => setFTime(e.target.value)} /></div>
+                  <div><label className="f" htmlFor="frep">Repeat</label><select className="in" id="frep" value={fRep} onChange={(e) => setFRep(e.target.value)}><option value="daily">Every day</option><option value="weekdays">Weekdays only</option><option value="weekly">Once a week (on the start day)</option></select></div>
+                </div>
+                <div className="full checks one"><label><input type="checkbox" checked={fNotify} onChange={(e) => setFNotify(e.target.checked)} /> Notify by SMS, WhatsApp or email when new leads land (Launchpad workflow on the tag <code>leads-finder-new</code>)</label></div>
+                <div className="full actions"><button className="btn" type="submit"><Icon name="calendar" />Save as a daily finder</button><span className="hint">{isPeople ? `Spends up to ${fPer} lookup credit${fPer === 1 ? '' : 's'} per run. Times are ${c.timezone}.` : 'Company records only; no lookup credits.'}</span></div>
+              </form>
+            </Fold>
+          )}
         </>
       )}
 
       {!landing && (
-        <section className="card" style={{ marginTop: 16 }}>
-          <h2>Daily Leads Finders</h2>
-          <p className="sub">What runs on its own. "Run now" pulls today's batch immediately.</p>
+        <section className="card">
+          <CardHead icon="calendar" title="Daily Leads Finders" sub={'What runs on its own. "Run now" pulls today\'s batch immediately.'} />
           <FindersList refreshKey={fKey} onChange={setNFinders} />
         </section>
       )}
 
-      <p className="foot">Searches are free and show first name, masked surname, title and company. Pushing looks each ticked person up for the full name, LinkedIn and the work email; a lookup credit is spent only when an email comes back. Pushed people land in Contacts under their company with Role, Industry, Company Size and LinkedIn URL, a note on the first contact of each company, and a "{c.pipeline || 'Business Development'}" outreach deal at its first stage.</p>
+      <Help title="How searching and pushing work">
+        <p>Searches are free and show first name, masked surname, title and company. Pushing looks each ticked person up for the full name, LinkedIn and the work email; a lookup credit is spent only when an email comes back.</p>
+        <p>Pushed people land in Contacts under their company with Role, Industry, Company Size and LinkedIn URL, a note on the first contact of each company, and a "{c.pipeline || 'Business Development'}" outreach deal at its first stage.</p>
+      </Help>
     </>
   );
 }

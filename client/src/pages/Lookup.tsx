@@ -4,7 +4,7 @@ import { useApp } from '../App';
 import { useBusy } from '../components/Busy';
 import { Chips } from '../components/Chips';
 import { Icon } from '../components/Icon';
-import { Checks, Errors, InLp, LpLink, Notice } from '../components/ui';
+import { CardHead, Checks, Errors, InLp, LpLink, Notice, PushCount, SelectBar } from '../components/ui';
 import { sizeBucket } from './Research';
 import type { Org, PeoplePushed, Person } from '../types';
 
@@ -89,8 +89,7 @@ export default function Lookup() {
 
       <section className="grid one">
         <div className="card">
-          <h2>Look up a company</h2>
-          <p className="sub">Type the company's web domain: the company's facts and the people who buy there come back, with a research note and a connection message drafted for the push.</p>
+          <CardHead icon="link" title="Look up a company" sub="Type the company's web domain: its facts and the people who buy there come back, with a research note and a connection message drafted for the push." />
           <form onSubmit={search}>
             <div className="search-row">
               <input type="text" value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="flowserve.com" autoComplete="off" aria-label="Company domain" autoFocus />
@@ -141,13 +140,13 @@ export default function Lookup() {
               <p className="sub">Tick who goes into Launchpad. The first ticked contact gets the note and the outreach deal. Surnames are masked until the push, which fills in the full name, LinkedIn and the work email where one exists. Roles are guessed from the title; change any.</p>
               {r.people.length ? (
                 <>
-                  <p className="sel-line">Select <a onClick={() => pick('all')}>all</a> · <a onClick={() => pick('none')}>none</a> · <a onClick={() => pick('email')}>only those with an email</a></p>
+                  <SelectBar onPick={(m) => pick(m === 'new' ? 'all' : m)} email />
                   <div className="scroll">
                     <table className="rows people">
                       <thead><tr><th scope="col"></th><th scope="col">Name</th><th scope="col">Title</th><th scope="col">Role</th><th scope="col">Email on file</th><th scope="col">LinkedIn</th></tr></thead>
                       <tbody>
                         {r.people.map((p) => (
-                          <tr key={p.id} className={p.in_lp ? 'dim' : ''}>
+                          <tr key={p.id} className={`${p.in_lp ? 'dim' : ''}${picks.has(p.id) ? ' sel' : ''}`.trim()}>
                             <td><input type="checkbox" checked={picks.has(p.id)} onChange={(e) => setPicks((s) => { const n = new Set(s); if (e.target.checked) n.add(p.id); else n.delete(p.id); return n; })} aria-label={`Push ${fullName(p)}`} /></td>
                             <td><span className="nm">{fullName(p)} <InLp p={p} /></span>{p.city && <span className="st">{p.city}</span>}</td>
                             <td>{p.title}</td>
@@ -178,7 +177,7 @@ export default function Lookup() {
           </section>
 
           <div className="pushbar">
-            <span className="cnt"><b>{nSel}</b> contacts ticked · uses up to <b>{nEmail}</b> of your <b>{nf(left)}</b> credits this month · creates the company, the contacts, the note and the outreach deal</span>
+            <PushCount n={nSel} people nEmail={nEmail} left={left} />
             {me.sample && <span className="hint">Sample mode: pushing is off.</span>}
             {left <= 0 && <span className="warn">{outOfCredits(c)}</span>}
             {!me.sample && left > 0 && nEmail > left && <span className="warn">Only {nf(left)} credits left this month: untick {nEmail - left}.</span>}
