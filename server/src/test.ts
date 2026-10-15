@@ -134,7 +134,7 @@ ok('activity filters', readActivity('test', { kind: 'push' }).total === 3 && rea
   ok('costs: selected month totals', rep.selected === '2026-10' && rep.totals.credits === 4 && rep.totals.research === 2 && Math.abs(rep.totals.gpt - 0.0004) < 1e-9 && rep.totals.searches === 2 && rep.totals.lookups === 4 && rep.totals.errors === 2 && !rep.totals.gpt_known);
   ok('costs: by month', rep.months.length === 3 && rep.months[1].month === '2026-09' && rep.months[1].searches === 2 && rep.months[1].total === 0 && rep.months[2].credits === 4);
   ok('costs: by account with shares', rep.clients.length === 2 && rep.clients[0].share === 50 && rep.clients[0].by_feature['Company lookup'].lookups === 0 && rep.totals.clients_active === 2);
-  ok('costs: by feature', rep.features.find((f) => f.feature === 'Daily finders')!.credits === 2 && rep.features.find((f) => f.feature === 'People tab')!.credits === 2 && rep.features.find((f) => f.feature === 'Ask')!.searches === 2);
+  ok('costs: by feature', rep.features.find((f) => f.feature === 'Daily finders')!.credits === 2 && rep.features.find((f) => f.feature === 'People tab')!.credits === 2 && rep.features.find((f) => f.feature === 'Scout')!.searches === 2);
   ok('costs: models', rep.models.find((m) => m.model === 'mystery')!.known === false && rep.models.find((m) => m.model === 'gpt-6-luna')!.calls === 2);
   const unpriced = costReport([{ slug: 'a', name: 'A', timezone: 'UTC', rows: rows('a') }], { months: 2, now });
   ok('costs: no credit price means counts only', unpriced.credit_cost === 0 && unpriced.totals.research === 0 && unpriced.totals.credits === 2);

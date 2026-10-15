@@ -10,7 +10,7 @@ export default function Finders() {
         <FindersList />
       </section>
       <Help title="How finders work">
-        <p>To add one, run a search on the <Link to="/">Ask</Link> tab, then open "Make this a daily finder" under the results.</p>
+        <p>To add one, run a search on the <Link to="/">Scout</Link> tab, then open "Make this a daily finder" under the results.</p>
         <p>People finders spend up to the chosen number of lookup credits per run; company finders spend none. A Launchpad workflow on the tag <code>leads-finder-new</code> sends the "found N new leads" message by SMS, WhatsApp or email.</p>
       </Help>
     </>

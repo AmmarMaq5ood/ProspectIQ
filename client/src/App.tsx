@@ -12,7 +12,7 @@ import AdminCosts from './pages/AdminCosts';
 import { ThemeToggle, useAdminTheme } from './components/Theme';
 import { Icon } from './components/Icon';
 import Login from './pages/Login';
-import Ask from './pages/Ask';
+import Scout from './pages/Scout';
 import Research from './pages/Research';
 import Lookup from './pages/Lookup';
 import Finders from './pages/Finders';
@@ -87,7 +87,7 @@ export default function App() {
             <Route path="settings" element={<AdminSettings />} />
           </Route>
           <Route path="/" element={me.client ? <Shell /> : <Navigate to={me.admin ? '/admin' : '/login'} replace />}>
-            <Route index element={<Ask />} />
+            <Route index element={<Scout />} />
             <Route path="people" element={<Research key="people" mode="people" />} />
             <Route path="companies" element={<Research key="companies" mode="companies" />} />
             <Route path="industries" element={<Research key="industries" mode="industries" />} />
@@ -128,7 +128,7 @@ function Shell() {
         </div>
       </header>
       <nav className="tabs" aria-label="Search by">
-        <NavLink to="/" end className={on}><Icon name="spark" />Ask</NavLink>
+        <NavLink to="/" end className={on}><Icon name="spark" />Scout</NavLink>
         <NavLink to="/people" className={on}><Icon name="people" />People</NavLink>
         <NavLink to="/companies" className={on}><Icon name="building" />Companies</NavLink>
         <NavLink to="/industries" className={on}><Icon name="chart" />Industries</NavLink>

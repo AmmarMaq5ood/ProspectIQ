@@ -50,8 +50,8 @@ export function FindersList({ refreshKey = 0, onChange }: { refreshKey?: number;
       )}
       {ap && finders.length > 0 && <AutoPushMeter ap={ap} active={active} support={me.client?.support_email || ''} />}
       {finders.length === 0 ? (
-        <EmptyState icon="calendar" title="No finders yet" text={<>Run a search on the Ask tab, then open <b>Make this a daily finder</b> under the results.</>}>
-          <a className="btn secondary sm" onClick={() => nav('/')}><Icon name="spark" />Go to Ask</a>
+        <EmptyState icon="calendar" title="No finders yet" text={<>Run a search on the Scout tab, then open <b>Make this a daily finder</b> under the results.</>}>
+          <a className="btn secondary sm" onClick={() => nav('/')}><Icon name="spark" />Go to Scout</a>
         </EmptyState>
       ) : (
         <div className="finders">

@@ -208,7 +208,7 @@ function TemplatesTab({ c, set, onSave }: { c: Client; set: (fn: (x: Client) => 
   return (
     <section className="card">
       <h2>Templates</h2>
-      <p className="sub">Ready-made requests the client sees on the Ask tab, grouped by theme. One request per line, written the way a person would ask.</p>
+      <p className="sub">Ready-made requests the client sees on the Scout tab, grouped by theme. One request per line, written the way a person would ask.</p>
       <div className="tplg">
         {groups.map(([g, items]) => (
           <div className="g" key={g}>
@@ -223,7 +223,7 @@ function TemplatesTab({ c, set, onSave }: { c: Client; set: (fn: (x: Client) => 
         <div />
         <button className="btn secondary" type="button" disabled={!newGroup.trim() || newGroup in t} onClick={() => { setT({ ...t, [newGroup.trim()]: [] }); setNewGroup(''); }}><Icon name="plus" />Add group</button>
       </div>
-      <SaveBar hint="Up to six requests per group show on the Ask tab." label="Save templates" onSave={onSave} />
+      <SaveBar hint="Up to six requests per group show on the Scout tab." label="Save templates" onSave={onSave} />
     </section>
   );
 }

@@ -7,7 +7,7 @@ import { Chips } from '../components/Chips';
 import { Icon } from '../components/Icon';
 import { CardHead, Checks, Errors, Field, Group, Help, InLp, Pager, PerPage, PushCount, PushedCompanies, PushedPeople, Range, ResultsHead, SelectBar } from '../components/ui';
 import { roleFromTitle } from '../roles';
-import { filtersToQuery } from './Ask';
+import { filtersToQuery } from './Scout';
 import type { CompaniesPushed, Filters, Org, PeoplePushed, Person, SearchResult } from '../types';
 
 type Mode = 'people' | 'companies' | 'industries';

@@ -59,7 +59,7 @@ export function lastMonths(n: number, now = Date.now()): string[] {
 
 /** Which feature a logged call belongs to, in the words the admin uses. */
 export function featureOf(ctx: string): string {
-  const map: Record<string, string> = { 'research:ask': 'Ask', 'research:people': 'People tab', 'research:companies': 'Companies tab', 'research:industries': 'Industries tab', 'research:lookup': 'Company lookup', 'research:push': 'Pushes (research tabs)', 'admin:draft': 'Admin: profile draft', usage: 'Usage page', me: 'Sign-in' };
+  const map: Record<string, string> = { 'research:ask': 'Scout', 'research:people': 'People tab', 'research:companies': 'Companies tab', 'research:industries': 'Industries tab', 'research:lookup': 'Company lookup', 'research:push': 'Pushes (research tabs)', 'admin:draft': 'Admin: profile draft', usage: 'Usage page', me: 'Sign-in' };
   if (map[ctx]) return map[ctx];
   if (ctx.startsWith('finder:')) return 'Daily finders';
   return 'Other';

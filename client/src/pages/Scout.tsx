@@ -9,8 +9,8 @@ import { CardHead, Criteria, EmptyState, Errors, Fold, Help, InLp, LpFilter, Not
 import { roleFromTitle } from '../roles';
 import type { AskResult, CompaniesPushed, Kind, Org, PeoplePushed, Person, RecentSearch } from '../types';
 
-/** The Ask tab: plain words in, leads out; tick, push; save as a daily finder. */
-export default function Ask() {
+/** The Scout tab (was "Ask"; renamed so it is not mistaken for Launchpad's built-in Ask AI): plain words in, leads out; tick, push; save as a daily finder. */
+export default function Scout() {
   const { me, options, reload } = useApp();
   const c = me.client!;
   const busy = useBusy();
@@ -58,7 +58,7 @@ export default function Ask() {
     const el = inputRef.current;
     if (!landing || !el || !examples.length || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     let ei = 0, ci = 0, del = false, timer = 0;
-    const base = 'Ask for leads… ';
+    const base = 'Tell Scout who you want… ';
     const tick = () => {
       if (document.activeElement === el && el.value) return;
       const ex = examples[ei];
@@ -157,7 +157,7 @@ export default function Ask() {
   const pill = (autofocus: boolean) => (
     <form className="ask-pill" onSubmit={submit}>
       <span className="ask-spark"><Icon name="spark" /></span>
-      <input ref={inputRef} type="text" value={text} onChange={(e) => setText(e.target.value)} placeholder="Ask for leads… e.g. purchasing managers at valve makers in Texas with 100 to 1,000 employees" autoComplete="off" aria-label="What leads are you looking for" autoFocus={autofocus} />
+      <input ref={inputRef} type="text" value={text} onChange={(e) => setText(e.target.value)} placeholder="Tell Scout who you want… e.g. purchasing managers at valve makers in Texas with 100 to 1,000 employees" autoComplete="off" aria-label="Who should Scout find" autoFocus={autofocus} />
       <button className="ask-send" type="submit" aria-label="Find leads" title="Find leads" disabled={busy.active}>{busy.active ? <span className="spin" /> : <Icon name="arrow-up" />}</button>
     </form>
   );
@@ -172,10 +172,10 @@ export default function Ask() {
 
       {landing ? (
         <>
-          <section className="ask-stage" aria-label="Ask for leads">
+          <section className="ask-stage" aria-label="Scout for leads">
             <div className="ask-inner">
-              <span className="ask-kicker"><Icon name="spark" />ProspectIQ</span>
-              <h2>What leads are you looking for?</h2>
+              <span className="ask-kicker"><Icon name="spark" />ProspectIQ Scout</span>
+              <h2>Who should Scout find for you?</h2>
               <p>Describe the buyers or the companies in your own words. Titles, industry, location, company size and revenue are all understood.</p>
               {pill(true)}
               <div className="ask-ex">
@@ -219,7 +219,7 @@ export default function Ask() {
           </section>
         </>
       ) : (
-        <section className="ask-hero compact" aria-label="Ask for leads">{pill(false)}</section>
+        <section className="ask-hero compact" aria-label="Scout for leads">{pill(false)}</section>
       )}
 
       {res && (

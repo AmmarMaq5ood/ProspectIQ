@@ -128,7 +128,7 @@ api.get('/recent', requireClient('recent'), (req, res) => {
   res.json({ recent: readJson<RecentSearch[]>(recentFile(req.piq!.client.slug), []).slice(0, 12) });
 });
 
-/* ---- Ask: plain words in, leads out ---- */
+/* ---- Scout (the tab was called Ask; the route and the usage context keep the old name): plain words in, leads out ---- */
 
 api.post('/ask', requireClient('research:ask'), wrap(async (req, res) => {
   const { client, sample, live, apollo, llm, useGpt } = req.piq!;

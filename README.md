@@ -44,7 +44,7 @@ Open `http://localhost:3000/admin`, enter the `ADMIN_KEY`, click **Artmark** and
 
 1. **Launchpad connection**: location id, private integration token, app address, outreach pipeline. *Test connection* lists the sub-account's pipelines so you can pick one.
 2. **Profile**: what they sell, who buys it, industries to search, roles, outreach angles. *Draft with GPT* reads the client's website and writes a first pass (needs an OpenAI key).
-3. **Templates**: the ready-made requests on the Ask tab, grouped by theme.
+3. **Templates**: the ready-made requests on the Scout tab, grouped by theme.
 4. **Keys & limits**: per-client OpenAI and research-database keys. Blank means the agency keys from `.env`.
 5. **Access & links**: the two menu links to add in Launchpad (*Settings → Custom menu links*, open inside the app). The access key in the link signs the client in; rotate it any time.
 
@@ -141,7 +141,7 @@ The site is https (the sign-in cookie is `SameSite=None; Secure`, which Launchpa
 
 ## How a client uses it
 
-- **Ask**: type a request; the "Understood as" chips show how it was read; tick leads; *Push to Launchpad*. *Refine with all filters* opens the same search on the People or Companies tab.
+- **Scout** (called Ask until Oct 2026; renamed so clients do not mix it up with Launchpad's built-in Ask AI): type a request; the "Understood as" chips show how it was read; tick leads; *Push to Launchpad*. *Refine with all filters* opens the same search on the People or Companies tab.
 - **People / Companies / Industries**: every filter the research database offers (titles, seniority, department, locations, size, revenue, funding, technologies, email status). Industries adds a size and headquarters breakdown and a one-click "find buyers at these companies".
 - **Company lookup**: one domain in; the company, its buyers, a drafted research note and connection message out.
 - **Daily finders**: saved searches with a start date, time, repeat rule and leads-per-run. New leads get the tags `leads-finder` and `leads-finder-new`; a Launchpad workflow on `leads-finder-new` sends the notification.

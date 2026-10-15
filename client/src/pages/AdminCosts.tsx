@@ -107,7 +107,7 @@ export default function AdminCosts() {
         </div>
         <div className="card">
           <h2>By feature · {d.label}</h2>
-          <p className="sub">What drove the spend: finders, the Ask tab, the research tabs, company lookups.</p>
+          <p className="sub">What drove the spend: finders, the Scout tab, the research tabs, company lookups.</p>
           {d.features.length ? (
             <div className="xscroll"><table>
               <thead><tr><th scope="col">Feature</th><th scope="col" className="num">Searches</th><th scope="col" className="num">Lookups</th><th scope="col" className="num">Credits</th><th scope="col" className="num">GPT calls</th><th scope="col" className="num">GPT</th>{priced && <th scope="col" className="num">Research</th>}{t.waterfall_calls > 0 && <th scope="col" className="num">Waterfall</th>}<th scope="col" className="num">Total</th></tr></thead>

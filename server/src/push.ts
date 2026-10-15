@@ -7,7 +7,7 @@ import { creditsLeft } from './credits.js';
 import { waterfall, type TregCtx } from './treg.js';
 import type { Client, Org, Person, PushResult } from './types.js';
 
-/** Push flows shared by the Ask tab, the People/Companies tabs and the finders. */
+/** Push flows shared by the Scout tab, the People/Companies tabs and the finders. */
 
 export interface WaterfallPlan { ctx: TregCtx; budgetMs: number }
 export interface PushPeopleOpts { live: boolean; apollo: ApolloCtx; tags?: string[]; noteHeader?: string; fits?: Record<string, string>; waterfall?: WaterfallPlan }
