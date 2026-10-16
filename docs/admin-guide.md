@@ -54,6 +54,7 @@ The client's own log and usage, the same views the client sees, plus the entries
 ## Settings
 
 - **Universal menu link**: `…/?loc={{location.id}}&k=<secret>`. Added once in Launchpad at agency level under custom menu links, it opens each sub-account's own ProspectIQ, matched by the location id saved on the client's connection. Sub-accounts not set up yet see a "not switched on" page. **Rotate** the secret if it leaks; the old link stops working at once.
+- **Team docs link**: the product overview, this guide and the changelog, for the team and sales. Clients never see these pages. Without the link or an admin sign-in, the docs show only the client guide, with no link out of Launchpad. Opening the link once unlocks the pages in that browser for 30 days.
 - **Support email**: shown to clients when they run out of credits, and in the finders' limit messages.
 - **Cost per lookup credit**: what the agency pays per credit, used by the Costs page.
 - **API keys**: the research database, the AI model and the email waterfall. Keys are shown masked once saved. **Remove** clears one. A key pasted here is used by every client without a key of their own.

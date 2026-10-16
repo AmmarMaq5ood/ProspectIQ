@@ -10,6 +10,8 @@ const KEY_ROWS: [KeyId, string, string][] = [['apollo', 'Research database key',
 /** Agency-wide settings: the one menu link for every sub-account, and the support email clients see. */
 export default function AdminSettings() {
   const [link, setLink] = useState('');
+  const [docsUrl, setDocsUrl] = useState('');
+  const [docsCopied, setDocsCopied] = useState(false);
   const [copied, setCopied] = useState(false);
   const [support, setSupport] = useState('');
   const [creditCost, setCreditCost] = useState('');
@@ -23,7 +25,7 @@ export default function AdminSettings() {
   };
   const [ok, setOk] = useState('');
   const [err, setErr] = useState('');
-  useEffect(() => { api<{ url: string; support_email?: string; credit_cost?: number; keys?: Record<KeyId, SecretState> }>('/admin/link').then((r) => { setLink(r.url); setSupport(r.support_email || ''); setCreditCost(r.credit_cost ? String(r.credit_cost) : ''); setKeys(r.keys || null); }).catch((e) => setErr(errText(e))); }, []);
+  useEffect(() => { api<{ url: string; docs_url?: string; support_email?: string; credit_cost?: number; keys?: Record<KeyId, SecretState> }>('/admin/link').then((r) => { setLink(r.url); setDocsUrl(r.docs_url || ''); setSupport(r.support_email || ''); setCreditCost(r.credit_cost ? String(r.credit_cost) : ''); setKeys(r.keys || null); }).catch((e) => setErr(errText(e))); }, []);
   const saveCost = async (e: FormEvent) => {
     e.preventDefault();
     setErr(''); setOk('');
@@ -62,6 +64,16 @@ export default function AdminSettings() {
               <button className="btn ghost sm" type="button" onClick={rotate}><Icon name="key" />Rotate secret</button>
             </div>
           </>
+        ) : <p className="empty">Loading…</p>}
+      </section>
+      <section className="card" style={{ marginBottom: 12 }}>
+        <h2>Team docs link</h2>
+        <p className="sub">The product overview, admin guide and changelog for the team and sales. Clients never see these pages: without this link or an admin sign-in, the docs show only the client guide, with no way out of Launchpad. Opening the link once keeps the pages unlocked in that browser for 30 days.</p>
+        {docsUrl ? (
+          <dl className="kv">
+            <dt>Team link</dt>
+            <dd><span className="copyable"><code>{docsUrl}</code><button className="btn secondary sm" type="button" onClick={async () => { try { await navigator.clipboard.writeText(docsUrl); setDocsCopied(true); setTimeout(() => setDocsCopied(false), 1500); } catch { /* clipboard blocked */ } }}><Icon name="link" />{docsCopied ? 'Copied' : 'Copy'}</button></span></dd>
+          </dl>
         ) : <p className="empty">Loading…</p>}
       </section>
       <section className="card" style={{ marginBottom: 12 }}>

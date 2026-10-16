@@ -4,6 +4,7 @@
 
 ## 16 October 2026
 
+- **Docs split by audience**: clients see only the client guide, with no link out of Launchpad. The overview, admin guide and changelog open with the admin sign-in or the team docs link from Settings.
 - **Screenshots** in the product overview, client guide and admin guide, and a ProspectIQ icon in the browser tab.
 - **Email waterfall page** in admin: hit rate, verified share, cost per email and speed from every lookup, plus a tester that runs the waterfall on a pasted list or a Scout search without pushing anything.
 - **Documentation** lives in the app: product overview, client guide, admin guide and this page, with a Guide link in the client header and a Docs link in the admin sidebar.

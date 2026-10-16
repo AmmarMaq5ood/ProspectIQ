@@ -101,12 +101,16 @@ export function getClientByLocation(locationId: string): Client | null {
 const SETTINGS = () => path.join(config.dataDir, 'settings.json');
 
 export interface AgencyKeys { openai: string; apollo: string; treg: string }
-export interface AgencySettings { link_secret: string; support_email: string; credit_cost: number; keys: AgencyKeys }
+export interface AgencySettings { link_secret: string; docs_secret: string; support_email: string; credit_cost: number; keys: AgencyKeys }
 
 export function agencySettings(): AgencySettings {
   const s = readJson<Partial<AgencySettings>>(SETTINGS(), {});
   if (!s.link_secret) {
     s.link_secret = newKey();
+    writeJson(SETTINGS(), s);
+  }
+  if (!s.docs_secret) {
+    s.docs_secret = newKey();
     writeJson(SETTINGS(), s);
   }
   if (typeof s.support_email !== 'string') s.support_email = '';
@@ -129,6 +133,11 @@ export function rotateLinkSecret(): AgencySettings {
 }
 
 /** The one link that works in every sub-account: Launchpad fills in {{location.id}} when the menu item is opened. */
+/** The team's docs link: the overview, admin guide and changelog, which clients must not see. The token sets a cookie, so it is needed once per browser. */
+export function teamDocsUrl(): string {
+  return `${config.publicUrl}/docs?k=${agencySettings().docs_secret}`;
+}
+
 export function universalLink(): string {
   return `${config.publicUrl}/?loc={{location.id}}&k=${encodeURIComponent(agencySettings().link_secret)}`;
 }

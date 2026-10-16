@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { marked } from 'marked';
 import { config } from './config.js';
 import { agencySettings } from './clients.js';
+import type express_ from 'express';
 import { DEFAULT_AUTO_PUSH_DAILY, DEFAULT_MAX_FINDERS } from './autopush.js';
 import { DEFAULT_MONTHLY } from './credits.js';
 
@@ -20,13 +21,14 @@ import { DEFAULT_MONTHLY } from './credits.js';
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const DOCS_DIR = path.resolve(here, '../../docs');
 
-export interface DocPage { slug: string; file: string; title: string; blurb: string }
+/** 'client' pages are public and shown to clients; 'team' pages need the admin sign-in or the team docs link. */
+export interface DocPage { slug: string; file: string; title: string; blurb: string; audience: 'client' | 'team' }
 
 export const DOC_PAGES: DocPage[] = [
-  { slug: 'overview', file: 'overview.md', title: 'Product overview', blurb: 'What it is, who it is for, what a client gets' },
-  { slug: 'client-guide', file: 'client-guide.md', title: 'Client guide', blurb: 'Every tab, step by step' },
-  { slug: 'admin-guide', file: 'admin-guide.md', title: 'Admin guide', blurb: 'Onboarding, credits, keys, costs' },
-  { slug: 'changelog', file: 'changelog.md', title: "What's new", blurb: 'Changes, newest first' },
+  { slug: 'overview', file: 'overview.md', title: 'Product overview', blurb: 'What it is, who it is for, what a client gets', audience: 'team' },
+  { slug: 'client-guide', file: 'client-guide.md', title: 'Client guide', blurb: 'Every tab, step by step', audience: 'client' },
+  { slug: 'admin-guide', file: 'admin-guide.md', title: 'Admin guide', blurb: 'Onboarding, credits, keys, costs', audience: 'team' },
+  { slug: 'changelog', file: 'changelog.md', title: "What's new", blurb: 'Changes, newest first', audience: 'team' },
 ];
 
 /** The {{placeholders}} the Markdown may use. */
@@ -45,6 +47,7 @@ export function docValues(): Record<string, string> {
     support_email: s.support_email || 'your Launchpad team',
     app_url: config.publicUrl,
     docs_url: `${config.publicUrl}/docs`,
+    team_docs_url: `${config.publicUrl}/docs?k=${s.docs_secret}`,
     base,
     updated,
   };
@@ -59,8 +62,8 @@ const slugify = (s: string) => s.replace(/<[^>]+>/g, '').toLowerCase().replace(/
 
 export interface RenderedDoc { page: DocPage; title: string; body: string; toc: { id: string; text: string }[]; html: string }
 
-/** Markdown → the full HTML page, or null for an unknown slug. */
-export function renderDoc(slug: string): RenderedDoc | null {
+/** Markdown → the full HTML page, or null for an unknown slug. `team` decides which pages the sidebar lists and whether the app link shows. */
+export function renderDoc(slug: string, team = true): RenderedDoc | null {
   const page = DOC_PAGES.find((p) => p.slug === slug);
   if (!page) return null;
   const raw = fs.readFileSync(path.join(DOCS_DIR, page.file), 'utf8');
@@ -88,17 +91,18 @@ export function renderDoc(slug: string): RenderedDoc | null {
   body = body.replace(/href="(overview|client-guide|admin-guide|changelog)(#[^"]*)?"/g, (_m, s: string, h = '') => `href="${values.base}/docs/${s}${h}"`);
 
   const title = `${page.title} · ProspectIQ`;
-  return { page, title, body, toc, html: layout(page, body, toc, values) };
+  return { page, title, body, toc, html: layout(page, body, toc, values, team) };
 }
 
-export function notFoundPage(): string {
+export function notFoundPage(team = false): string {
   const values = docValues();
-  const body = `<h1>Not found</h1><p>There is no page by that name. Pick one:</p><ul>${DOC_PAGES.map((p) => `<li><a href="${values.base}/docs/${p.slug}">${esc(p.title)}</a>: ${esc(p.blurb)}</li>`).join('')}</ul>`;
-  return layout({ slug: '', file: '', title: 'Not found', blurb: '' }, body, [], values);
+  const pages = DOC_PAGES.filter((p) => team || p.audience === 'client');
+  const body = `<h1>Not found</h1><p>There is no page by that name. Pick one:</p><ul>${pages.map((p) => `<li><a href="${values.base}/docs/${p.slug}">${esc(p.title)}</a>: ${esc(p.blurb)}</li>`).join('')}</ul>`;
+  return layout({ slug: '', file: '', title: 'Not found', blurb: '', audience: 'client' }, body, [], values, team);
 }
 
-function layout(page: DocPage, body: string, toc: { id: string; text: string }[], v: Record<string, string>): string {
-  const nav = DOC_PAGES.map((p) => `<a class="${p.slug === page.slug ? 'on' : ''}" href="${v.base}/docs/${p.slug}"><strong>${esc(p.title)}</strong><span>${esc(p.blurb)}</span></a>`).join('');
+function layout(page: DocPage, body: string, toc: { id: string; text: string }[], v: Record<string, string>, team: boolean): string {
+  const nav = DOC_PAGES.filter((p) => team || p.audience === 'client').map((p) => `<a class="${p.slug === page.slug ? 'on' : ''}" href="${v.base}/docs/${p.slug}"><strong>${esc(p.title)}</strong><span>${esc(p.blurb)}</span></a>`).join('');
   // toc text comes out of marked already escaped, so it is used as is
   const onPage = toc.length ? `<div class="toc"><h4>On this page</h4>${toc.map((t) => `<a href="#${t.id}">${t.text}</a>`).join('')}</div>` : '';
   return `<!doctype html>
@@ -135,6 +139,7 @@ a:hover { text-decoration: underline; }
 .side-foot { margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; }
 .side-foot button { all: unset; cursor: pointer; color: var(--primary); }
 .side-foot button:hover { text-decoration: underline; }
+.team-note { font-size: 12px; color: var(--muted); line-height: 1.45; }
 .main { padding: 40px 48px 80px; }
 article { max-width: 760px; }
 article h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.2; font-weight: 600; letter-spacing: -0.01em; }
@@ -188,7 +193,7 @@ article p.cap { margin: 0 0 18px; font-size: 13px; color: var(--muted); }
     <nav class="pages" aria-label="Documentation">${nav}</nav>
     ${onPage}
     <div class="side-foot">
-      <a href="${v.app_url}/">Open ProspectIQ</a>
+      ${team ? `<a href="${v.app_url}/admin">Open the admin panel</a><span class="team-note">Team pages. Clients only ever see the Client guide, and only inside Launchpad.</span>` : ''}
       <button type="button" onclick="window.print()">Print or save as PDF</button>
     </div>
   </aside>
@@ -198,18 +203,38 @@ article p.cap { margin: 0 0 18px; font-size: 13px; color: var(--muted); }
 </html>`;
 }
 
+/**
+ * Who may see the team pages: an admin (the admin cookie), or anyone who
+ * opened the team docs link once (?k=<docs secret>, kept in a cookie for 30
+ * days so the pages link to each other without the token).
+ */
+export function isTeam(req: express_.Request, res?: express_.Response): boolean {
+  const s = agencySettings();
+  const admin = !!config.adminKey && String(req.cookies?.piq_admin || '') === config.adminKey;
+  if (admin) return true;
+  const k = String(req.query?.k || '');
+  if (k && k === s.docs_secret) {
+    if (res) {
+      const https = req.secure || config.publicUrl.startsWith('https://');
+      res.cookie('piq_docs', k, { httpOnly: true, sameSite: 'lax', secure: https, path: '/', maxAge: 30 * 86400000 });
+    }
+    return true;
+  }
+  return String(req.cookies?.piq_docs || '') === s.docs_secret;
+}
+
 /** GET /docs, /docs/:slug. Mounted before the app's static files and SPA fallback. */
 export function docsRouter(): express.Router {
   const r = express.Router();
-  const send = (res: express.Response, slug: string) => {
-    const d = renderDoc(slug);
+  const send = (req: express.Request, res: express.Response, slug: string, team = isTeam(req, res)) => {
+    const d = renderDoc(slug, team);
     res.setHeader('Cache-Control', 'no-store');
     res.type('html');
-    if (!d) return res.status(404).send(notFoundPage());
+    if (!d || (d.page.audience === 'team' && !team)) return res.status(404).send(notFoundPage(team));
     return res.send(d.html);
   };
   r.use('/img', express.static(path.join(DOCS_DIR, 'img'), { maxAge: '1d', index: false }));
-  r.get('/', (_req, res) => send(res, 'overview'));
-  r.get('/:slug', (req, res) => send(res, String(req.params.slug).toLowerCase()));
+  r.get('/', (req, res) => { const team = isTeam(req, res); send(req, res, team ? 'overview' : 'client-guide', team); });
+  r.get('/:slug', (req, res) => send(req, res, String(req.params.slug).toLowerCase()));
   return r;
 }

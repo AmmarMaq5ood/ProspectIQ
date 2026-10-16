@@ -1,4 +1,4 @@
-import { ARTMARK_PROFILE } from './clients.js';
+import { ARTMARK_PROFILE, agencySettings } from './clients.js';
 import { cleanFilters, filtersActive, intentFilters, rulesIntent } from './rules.js';
 import { companyBody, peopleBody, DEP_CODES } from './apollo.js';
 import { fitRule } from './llm.js';
@@ -15,7 +15,7 @@ import { logActivity, readActivity, readActivityAll } from './activity.js';
 import { autoPushState, dayKeyIn, finderLimitText, maxFinders } from './autopush.js';
 import { costReport, featureOf, lastMonths, monthKey } from './costs.js';
 import { isFreeMail, pickEmail, waterfall } from './treg.js';
-import { DOC_PAGES, DOCS_DIR, fillPlaceholders, renderDoc } from './docs.js';
+import { DOC_PAGES, DOCS_DIR, fillPlaceholders, isTeam, notFoundPage, renderDoc } from './docs.js';
 import { parsePeopleList, sourceOf, statsFromRows } from './wfadmin.js';
 import type { Client, Finder, Person, UsageRow } from './types.js';
 
@@ -187,6 +187,16 @@ ok('activity filters', readActivity('test', { kind: 'push' }).total === 3 && rea
   ok('docs: links between pages resolve under /docs', pages.find((d) => d.page.slug === 'overview')!.body.includes('/docs/admin-guide"'));
   ok('docs: unknown placeholders are left alone, known ones filled', fillPlaceholders('a {{daily_cap}} b {{nope}}', { daily_cap: '50' }) === 'a 50 b {{nope}}');
   ok('docs: unknown page is null', renderDoc('nope') === null);
+  const clientView = renderDoc('client-guide', false)!.html;
+  const teamView = renderDoc('client-guide', true)!.html;
+  ok('docs: the client view lists only the client guide and has no link out of Launchpad', !clientView.includes('/docs/admin-guide') && !clientView.includes('/docs/overview') && !clientView.includes('Open the admin panel') && clientView.includes('Print or save as PDF'));
+  ok('docs: the team view lists every page', teamView.includes('/docs/admin-guide') && teamView.includes('/docs/overview') && teamView.includes('/docs/changelog') && teamView.includes('Open the admin panel'));
+  ok('docs: the not-found page for clients does not reveal the team pages', !notFoundPage(false).includes('/docs/admin-guide') && notFoundPage(true).includes('/docs/admin-guide'));
+  const secret = agencySettings().docs_secret;
+  const fakeReq = (q: Record<string, string>, cookies: Record<string, string>) => ({ query: q, cookies, secure: false } as unknown as import('express').Request);
+  let setCookie = '';
+  const fakeRes = { cookie: (name: string, value: string) => { setCookie = `${name}=${value}`; } } as unknown as import('express').Response;
+  ok('docs: the team link token unlocks the team pages and sets the cookie; a wrong token does not', secret.length > 10 && isTeam(fakeReq({ k: secret }, {}), fakeRes) && setCookie === `piq_docs=${secret}` && !isTeam(fakeReq({ k: 'nope' }, {})) && isTeam(fakeReq({}, { piq_docs: secret })) && !isTeam(fakeReq({}, {})));
   const imgs = DOC_PAGES.flatMap((p) => [...fs.readFileSync(path.join(DOCS_DIR, p.file), 'utf8').matchAll(/\]\(img\/([^)]+)\)/g)].map((m) => m[1]));
   ok('docs: every screenshot a guide references exists and is captioned', imgs.length >= 6 && imgs.every((f) => fs.existsSync(path.join(DOCS_DIR, 'img', f))) && pages.find((d) => d.page.slug === 'overview')!.body.includes('<p class="cap">'));
 }

@@ -1,7 +1,7 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import path from 'node:path';
 import { config } from './config.js';
-import { createClient, deleteClient, effectiveKeys, getClient, getClientByKey, getClientByLocation, listClients, newKey, publicClient, rotateLinkSecret, saveClient, saveAgencySettings, agencySettings, universalLink } from './clients.js';
+import { createClient, deleteClient, effectiveKeys, getClient, getClientByKey, getClientByLocation, listClients, newKey, publicClient, rotateLinkSecret, saveClient, saveAgencySettings, agencySettings, teamDocsUrl, universalLink } from './clients.js';
 import { addCredits, creditCheck, creditLedger, creditsLeft, creditsView, restoreFull, setMonthly, spendCredits } from './credits.js';
 import { autoPushState, finderLimitText, maxFinders } from './autopush.js';
 import { adminView, agencyKeyStates } from './clients.js';
@@ -473,7 +473,7 @@ admin.get('/activity', (req, res) => {
 
 admin.get('/link', (_req, res) => {
   const s = agencySettings();
-  res.json({ url: universalLink(), secret_set: !!s.link_secret, support_email: s.support_email, credit_cost: s.credit_cost, keys: agencyKeyStates() });
+  res.json({ url: universalLink(), docs_url: teamDocsUrl(), secret_set: !!s.link_secret, support_email: s.support_email, credit_cost: s.credit_cost, keys: agencyKeyStates() });
 });
 
 admin.put('/settings', (req, res) => {

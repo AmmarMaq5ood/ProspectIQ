@@ -108,4 +108,4 @@ The [admin guide](admin-guide) covers each screen.
 ## Links
 
 - The app: {{app_url}}/
-- [Client guide](client-guide), [Admin guide](admin-guide), [What's new](changelog)
+- [Client guide](client-guide) is the only page clients can open, from the Guide button in their header. This overview, the [admin guide](admin-guide) and [what's new](changelog) need the admin sign-in or the team docs link from Settings.
