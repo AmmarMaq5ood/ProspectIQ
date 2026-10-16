@@ -226,11 +226,14 @@ export function EmptyState({ icon = 'search', title, text, children }: { icon?: 
 }
 
 /** The help footer: collapsed until wanted. */
-export function Help({ title = 'How this works', children }: { title?: string; children: ReactNode }) {
+export function Help({ title = 'How this works', more, children }: { title?: string; more?: string; children: ReactNode }) {
   return (
     <details className="help">
       <summary><Icon name="chevron" />{title}</summary>
-      <div>{children}</div>
+      <div>
+        {children}
+        {more && <p><a href={`${import.meta.env.BASE_URL}docs/${more}`} target="_blank" rel="noopener">Read the full guide</a></p>}
+      </div>
     </details>
   );
 }

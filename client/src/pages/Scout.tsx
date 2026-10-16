@@ -289,7 +289,7 @@ export default function Scout() {
         </section>
       )}
 
-      <Help title="How searching and pushing work">
+      <Help title="How searching and pushing work" more="client-guide#scout">
         <p>Searches are free and show first name, masked surname, title and company. Pushing looks each ticked person up for the full name, LinkedIn and the work email; a lookup credit is spent only when an email comes back.</p>
         <p>Pushed people land in Contacts under their company with Role, Industry, Company Size and LinkedIn URL, a note on the first contact of each company, and a "{c.pipeline || 'Business Development'}" outreach deal at its first stage.</p>
       </Help>

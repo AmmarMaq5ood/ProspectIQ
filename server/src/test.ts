@@ -15,6 +15,7 @@ import { logActivity, readActivity, readActivityAll } from './activity.js';
 import { autoPushState, dayKeyIn, finderLimitText, maxFinders } from './autopush.js';
 import { costReport, featureOf, lastMonths, monthKey } from './costs.js';
 import { isFreeMail, pickEmail, waterfall } from './treg.js';
+import { DOC_PAGES, fillPlaceholders, renderDoc } from './docs.js';
 import type { Client, Finder, Person, UsageRow } from './types.js';
 
 /** Pure checks, no network: the parser, filters, samples, schedule maths, usage, drafting. */
@@ -172,6 +173,19 @@ ok('activity filters', readActivity('test', { kind: 'push' }).total === 3 && rea
   const base = { slug: 'x', launchpad: { timezone: 'UTC' } } as unknown as Client;
   ok('finders at once: default 2, admin value wins', maxFinders({ ...base, auto_push: { daily: 50, day: '', used: 0 } } as Client) === 2 && maxFinders({ ...base, auto_push: { daily: 50, day: '', used: 0, max_finders: 5 } } as Client) === 5);
   ok('finders at once: room, then blocked, then off', finderLimitText(2, 1) === '' && /Pause or remove one/.test(finderLimitText(2, 2)) && /switched off/.test(finderLimitText(0, 0)));
+}
+
+
+/* ---- docs ---- */
+{
+  const pages = DOC_PAGES.map((p) => renderDoc(p.slug)!);
+  ok('docs: every page renders with its title', pages.every((d, i) => d && d.html.includes(`<title>${DOC_PAGES[i].title}`) && /<h1[^>]*>/.test(d.body)));
+  ok('docs: no placeholder left unfilled', pages.every((d) => !/\{\{\s*[a-z_]+\s*\}\}/.test(d.body)));
+  ok('docs: numbers come from the app settings', pages.find((d) => d.page.slug === 'overview')!.body.includes('50, all finders together') && pages.find((d) => d.page.slug === 'client-guide')!.body.includes('<strong>2 finders</strong>'));
+  ok('docs: headings get ids and an on-this-page list', pages.find((d) => d.page.slug === 'client-guide')!.toc.some((t) => t.id === 'daily-finders') && pages.find((d) => d.page.slug === 'client-guide')!.body.includes('<h2 id="scout">'));
+  ok('docs: links between pages resolve under /docs', pages.find((d) => d.page.slug === 'overview')!.body.includes('/docs/admin-guide"'));
+  ok('docs: unknown placeholders are left alone, known ones filled', fillPlaceholders('a {{daily_cap}} b {{nope}}', { daily_cap: '50' }) === 'a 50 b {{nope}}');
+  ok('docs: unknown page is null', renderDoc('nope') === null);
 }
 
 console.log(process.exitCode ? `FAILURES in ${n} checks` : `all ${n} checks pass`);

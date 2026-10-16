@@ -123,6 +123,7 @@ function Shell() {
         </div>
         <div className="ctrls">
           <CreditsRing total={c.credits.total} used={c.credits.used} left={c.credits.left} resets={c.credits.resets_label} />
+          <a className="btn secondary sm" href={`${import.meta.env.BASE_URL}docs/client-guide`} target="_blank" rel="noopener"><Icon name="link" />Guide</a>
           {me.admin && <Link className="btn secondary sm" to="/admin"><Icon name="settings" />Admin</Link>}
           {me.admin && <button className="btn ghost sm" type="button" onClick={signOut}>Sign out</button>}
         </div>
@@ -160,6 +161,7 @@ function AdminShell() {
           <NavLink to="/admin/clients" className={on}><Icon name="people" />Clients</NavLink>
           <NavLink to="/admin/costs" className={on}><Icon name="chart" />Costs</NavLink>
           <NavLink to="/admin/settings" className={on}><Icon name="settings" />Settings</NavLink>
+          <a href={`${import.meta.env.BASE_URL}docs/admin-guide`} target="_blank" rel="noopener"><Icon name="link" />Docs</a>
         </nav>
         <div className="side-foot">
           <ThemeToggle dark={dark} onChange={setDark} />

@@ -4,6 +4,10 @@ Plain-words lead research for Launchpad clients. A client types what leads they 
 
 This is the Node + React rebuild of the PHP research tool that lives in the Artmark dashboard. It is **multi-client from the start**: every client has its own Launchpad connection, profile (what they sell and to whom), templates, keys and usage log, all managed from an admin panel.
 
+## Documentation
+
+The product overview, client guide, admin guide and changelog live in `docs/*.md` and are served by the app at `/docs` (live: https://js.launchpadinnovations.ai/prospectiq/docs), no sign-in needed. Numbers the app enforces (default credits, the daily cap, finders at a time) are filled in at render time from the settings. The client header has a Guide link and the admin sidebar a Docs link. **Every feature commit updates the matching page and adds a line to `docs/changelog.md`.** Nothing secret goes in these files: they are public.
+
 ## Layout
 
 ```

@@ -7,9 +7,11 @@ import { config } from './config.js';
 import { initData } from './clients.js';
 import { api } from './routes.js';
 import { startScheduler } from './finders.js';
+import { docsRouter } from './docs.js';
 
 /**
- * ProspectIQ server: the JSON API under /api, the built React app for
+ * ProspectIQ server: the JSON API under /api, the documentation under
+ * /docs (Markdown in docs/, rendered on request), the built React app for
  * everything else, and the finder scheduler in-process (no cron needed).
  * With BASE_PATH set (e.g. /prospectiq) the whole app lives under that
  * prefix, so it can share a domain with other apps behind nginx.
@@ -38,6 +40,7 @@ site.use(cookieParser());
 
 site.get('/api/health', (_req, res) => res.json({ ok: true, name: 'ProspectIQ', base: config.basePath || '/', time: Date.now() }));
 site.use('/api', api);
+site.use('/docs', docsRouter());
 site.use('/api', (err: Error & { status?: number }, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   const status = err.status || 500;
   if (status >= 500) console.error('[api]', err);
