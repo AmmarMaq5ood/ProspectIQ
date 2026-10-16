@@ -19,6 +19,7 @@ import type { Client, Person, UsageRow } from './types.js';
 
 export const TEST_CTX = 'admin:waterfall';
 const TESTS = () => path.join(config.dataDir, 'waterfall-tests.jsonl');
+const linkedinSlug = (u?: string) => (u ? decodeURIComponent(u.split('/in/')[1] || '').replace(/[/?#].*$/, '') : '');
 
 export interface TestPerson { first: string; last: string; domain: string; linkedin?: string; company?: string; title?: string }
 export type TestStatus = 'found' | 'none' | 'error' | 'had_email' | 'skipped';
@@ -29,27 +30,47 @@ export interface TestRow {
 }
 
 const LINKEDIN = /https?:\/\/(?:[a-z]{2,3}\.)?linkedin\.com\/in\/[^\s,;|<>]+/i;
+const URLISH = /(?:https?:\/\/|www\.)[^\s,;|<>]+/gi;
 const DOMAIN = /\b(?:[a-z0-9-]+\.)+[a-z]{2,}\b/i;
+const EMAIL = /[^\s@<>,;|]+@(?:[a-z0-9-]+\.)+[a-z]{2,}/i;
 
-/** One person per line: "Jane Smith, acme.com", "Jane Smith acme.com", "Jane Smith <https://linkedin.com/in/jane>" or just a LinkedIn URL. */
+/**
+ * People, one per line or spread over lines: "Jane Smith, acme.com",
+ * "Jane Smith acme.com", "Jane Smith <https://linkedin.com/in/jane>", a bare
+ * LinkedIn URL, or a name on one line with the website and LinkedIn URL on
+ * the lines after it. Websites and emails give the company domain.
+ */
 export function parsePeopleList(text: string): TestPerson[] {
   const out: TestPerson[] = [];
+  let open = false; // the last entry is a name still waiting for its website or LinkedIn line
   for (const raw of String(text || '').split(/\r?\n/)) {
     let line = raw.trim();
     if (!line || line.startsWith('#')) continue;
     const li = line.match(LINKEDIN);
-    const linkedin = li ? li[0].replace(/[>)\]]+$/, '') : '';
+    const linkedin = li ? li[0].replace(/[?#].*$/, '').replace(/\/+$/, '') : '';
     if (li) line = line.replace(li[0], ' ');
-    line = line.replace(/<|>/g, ' ');
+    let domain = '';
+    line = line.replace(URLISH, (u) => { try { domain = domain || new URL(u.startsWith('http') ? u : `https://${u}`).hostname.toLowerCase().replace(/^www\./, ''); } catch { /* not a URL */ } return ' '; });
+    line = line.replace(EMAIL, (e) => { domain = domain || e.split('@')[1].toLowerCase(); return ' '; });
+    line = line.replace(/<|>|\(|\)/g, ' ');
     const dm = line.match(DOMAIN);
-    const domain = dm ? dm[0].toLowerCase().replace(/^www\./, '') : '';
-    if (dm) line = line.replace(dm[0], ' ');
-    const words = line.replace(/[,;|\t]+/g, ' ').split(/\s+/).filter(Boolean);
+    if (dm) { domain = domain || dm[0].toLowerCase().replace(/^www\./, ''); line = line.replace(dm[0], ' '); }
+    const words = line.replace(/[,;|\t]+/g, ' ').split(/\s+/).filter((w) => /[a-z]/i.test(w));
     const first = words[0] || '';
     const last = words.slice(1).join(' ');
-    if (linkedin || (first && last && domain)) out.push({ first, last, domain, linkedin: linkedin || undefined });
+    const prev = out[out.length - 1];
+    if (!first && open && prev && (domain || linkedin)) {
+      // a website or LinkedIn line under a name: same person
+      if (domain && !prev.domain) prev.domain = domain;
+      if (linkedin && !prev.linkedin) prev.linkedin = linkedin;
+      continue;
+    }
+    if (!first && !linkedin) continue;
+    open = !!first && !domain && !linkedin;
+    out.push({ first, last, domain, linkedin: linkedin || undefined });
   }
-  return out;
+  // a name alone is not enough; a LinkedIn URL alone is
+  return out.filter((p) => p.linkedin || (p.first && p.last && p.domain));
 }
 
 export function readTests(limit = 100): TestRow[] {
@@ -64,8 +85,8 @@ async function lookupOne(client: Client, key: string, p: TestPerson, mode: 'list
   try {
     const hit = await tregFind({ slug: client.slug, key, ctx: TEST_CTX, timeoutMs: 30000 }, { first: p.first, last: p.last, domain: p.domain, linkedin: p.linkedin });
     row = hit
-      ? { ...base, email: hit.email, verified: hit.verified, provider: hit.provider, cost: hit.cost, ms: Date.now() - t0, status: 'found' }
-      : { ...base, email: '', verified: false, provider: '', cost: 0, ms: Date.now() - t0, status: 'none' };
+      ? { ...base, first: base.first || hit.first || '', last: base.last || hit.last || '', domain: base.domain || hit.email.split('@')[1] || '', email: hit.email, verified: hit.verified, provider: hit.provider, cost: hit.cost, ms: Date.now() - t0, status: 'found' }
+      : { ...base, first: base.first || linkedinSlug(p.linkedin), email: '', verified: false, provider: '', cost: 0, ms: Date.now() - t0, status: 'none' };
   } catch (e) {
     row = { ...base, email: '', verified: false, provider: '', cost: 0, ms: Date.now() - t0, status: 'error', err: String((e as Error).message || e).slice(0, 200) };
   }

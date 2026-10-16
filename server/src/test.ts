@@ -193,7 +193,9 @@ ok('activity filters', readActivity('test', { kind: 'push' }).total === 3 && rea
 /* ---- email waterfall admin ---- */
 {
   const ppl = parsePeopleList('Jane Smith, acme.com\n# a comment\nJohn Q Doe www.Example.co.uk\nhttps://www.linkedin.com/in/someone-123/\nOnly Name\nMary Jones <https://linkedin.com/in/mary> acme.com\n');
-  ok('waterfall tester: parses name + domain, multi-word surnames, LinkedIn URLs; skips comments and incomplete lines', ppl.length === 4 && ppl[0].first === 'Jane' && ppl[0].last === 'Smith' && ppl[0].domain === 'acme.com' && ppl[1].last === 'Q Doe' && ppl[1].domain === 'example.co.uk' && ppl[2].linkedin === 'https://www.linkedin.com/in/someone-123/' && ppl[3].linkedin === 'https://linkedin.com/in/mary' && ppl[3].domain === 'acme.com');
+  ok('waterfall tester: parses name + domain, multi-word surnames, LinkedIn URLs; skips comments and incomplete lines', ppl.length === 4 && ppl[0].first === 'Jane' && ppl[0].last === 'Smith' && ppl[0].domain === 'acme.com' && ppl[1].last === 'Q Doe' && ppl[1].domain === 'example.co.uk' && ppl[2].linkedin === 'https://www.linkedin.com/in/someone-123' && ppl[3].linkedin === 'https://linkedin.com/in/mary' && ppl[3].domain === 'acme.com');
+  const multi = parsePeopleList('Muhammad Zeeshan\nhttps://plumtreegroup.net/\nhttps://www.linkedin.com/in/muhammad-zeeshan-6b4a921b5/?lipi=urn%3Ali%3Apage\nAda Lovelace (ada@analytical.co)\nhttps://www.acme.com/about-us\nGrace Hopper');
+  ok('waterfall tester: a name followed by website and LinkedIn lines is one person; URLs and emails give the domain; a lone name is dropped', multi.length === 2 && multi[0].first === 'Muhammad' && multi[0].last === 'Zeeshan' && multi[0].domain === 'plumtreegroup.net' && multi[0].linkedin === 'https://www.linkedin.com/in/muhammad-zeeshan-6b4a921b5' && multi[1].first === 'Ada' && multi[1].domain === 'analytical.co' && !multi[1].linkedin);
   const now = Date.UTC(2026, 9, 16, 12);
   const rows: UsageRow[] = [
     { t: now - 1000, ctx: 'research:ask', p: 'treg', ok: 1, ms: 4000, n: 1, model: 'verified', kind: 'prov-a', cost: 0.012 },

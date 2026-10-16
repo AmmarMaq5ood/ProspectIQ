@@ -15,7 +15,7 @@ const API = 'https://treg.to/call/treg.people.email.find';
 const FREE_MAIL = new Set(['gmail.com', 'googlemail.com', 'yahoo.com', 'ymail.com', 'hotmail.com', 'outlook.com', 'live.com', 'msn.com', 'icloud.com', 'me.com', 'mac.com', 'aol.com', 'protonmail.com', 'proton.me', 'gmx.com', 'gmx.net', 'mail.com', 'yandex.com', 'zoho.com', 'comcast.net', 'att.net', 'verizon.net']);
 
 export interface TregCtx { slug: string; key: string; ctx: string; timeoutMs?: number; maxCost?: number }
-export interface TregHit { email: string; verified: boolean; provider: string; cost: number }
+export interface TregHit { email: string; verified: boolean; provider: string; cost: number; first?: string; last?: string }
 
 export const isFreeMail = (email: string): boolean => FREE_MAIL.has((email.toLowerCase().split('@')[1] || '').trim());
 
@@ -67,8 +67,12 @@ export async function tregFind(t: TregCtx, p: { first: string; last: string; dom
     return null;
   }
   const hit = pickEmail(json.output ?? json, p.domain);
+  const o = (json.output && typeof json.output === 'object' ? json.output : json) as Record<string, unknown>;
+  const nm = String(o.full_name || o.name || '').trim().split(/\s+/);
+  const first = String(o.first_name || (nm.length > 1 ? nm[0] : '') || '').trim();
+  const last = String(o.last_name || (nm.length > 1 ? nm.slice(1).join(' ') : '') || '').trim();
   usageLog(t.slug, t.ctx, { p: 'treg', ep: 'people.email.find', ok: 1, ms, cost, n: hit ? 1 : 0, kind: provider || undefined, model: hit ? (hit.verified ? 'verified' : 'unverified') : 'none' });
-  return hit ? { ...hit, provider, cost } : null;
+  return hit ? { ...hit, provider, cost, first: first || undefined, last: last || undefined } : null;
 }
 
 export interface WaterfallOpts { budgetMs: number; maxFinds: number; concurrency?: number; find?: typeof tregFind; now?: () => number }

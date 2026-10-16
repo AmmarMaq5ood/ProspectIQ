@@ -87,8 +87,8 @@ export default function AdminWaterfall() {
           {mode === 'list' ? (
             <>
               <div />
-              <div className="full"><label className="f" htmlFor="wft">People, one per line: name and company domain, or a LinkedIn URL</label><textarea id="wft" className="wf-list" value={text} onChange={(e) => setText(e.target.value)} placeholder={'Jane Smith, acme.com\nJohn Doe acme.com\nhttps://www.linkedin.com/in/someone'} /></div>
-              <div className="full actions"><button className="btn" type="submit" disabled={running || !text.trim() || !who}>{running ? <span className="spin" /> : <Icon name="search" />}Find emails</button><span className="hint">Up to 20 people per run. Lines without a name and a domain, or a LinkedIn URL, are ignored.</span></div>
+              <div className="full"><label className="f" htmlFor="wft">People, one per line: name and company domain, or a LinkedIn URL</label><textarea id="wft" className="wf-list" value={text} onChange={(e) => setText(e.target.value)} placeholder={'Jane Smith, acme.com\nJohn Doe acme.com\nhttps://www.linkedin.com/in/someone\n\nMary Jones\nhttps://www.example.com\nhttps://www.linkedin.com/in/mary'} /></div>
+              <div className="full actions"><button className="btn" type="submit" disabled={running || !text.trim() || !who}>{running ? <span className="spin" /> : <Icon name="search" />}Find emails</button><span className="hint">Up to 20 people per run. A name followed by its website and LinkedIn lines counts as one person. A name on its own is skipped.</span></div>
             </>
           ) : (
             <>
