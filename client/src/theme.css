@@ -46,7 +46,7 @@
 }
 
 /* ---- canvas and type ---- */
-body:has(> #root > .top), body:has(> #root > .admin-app) { background: var(--canvas); background-attachment: fixed; }
+body { background: var(--canvas); background-attachment: fixed; }
 body { font-size: 14px; letter-spacing: 0.002em; }
 h1, h2, h3, .top h1, .page-head h1, .card h2, .rhead .n b, .kpi .v { font-family: var(--font); }
 .top h1, .page-head h1 { font-weight: 700; letter-spacing: -0.015em; }
