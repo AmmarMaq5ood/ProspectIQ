@@ -9,6 +9,7 @@ import Activity from './pages/Activity';
 import AdminOverview from './pages/AdminOverview';
 import AdminSettings from './pages/AdminSettings';
 import AdminCosts from './pages/AdminCosts';
+import AdminWaterfall from './pages/AdminWaterfall';
 import { ThemeToggle, useAdminTheme } from './components/Theme';
 import { Icon } from './components/Icon';
 import Login from './pages/Login';
@@ -84,6 +85,7 @@ export default function App() {
             <Route path="clients" element={<Admin />} />
             <Route path="clients/:slug" element={<AdminClient />} />
             <Route path="costs" element={<AdminCosts />} />
+            <Route path="waterfall" element={<AdminWaterfall />} />
             <Route path="settings" element={<AdminSettings />} />
           </Route>
           <Route path="/" element={me.client ? <Shell /> : <Navigate to={me.admin ? '/admin' : '/login'} replace />}>
@@ -160,6 +162,7 @@ function AdminShell() {
           <NavLink to="/admin" end className={on}><Icon name="home" />Overview</NavLink>
           <NavLink to="/admin/clients" className={on}><Icon name="people" />Clients</NavLink>
           <NavLink to="/admin/costs" className={on}><Icon name="chart" />Costs</NavLink>
+          <NavLink to="/admin/waterfall" className={on}><Icon name="search" />Email waterfall</NavLink>
           <NavLink to="/admin/settings" className={on}><Icon name="settings" />Settings</NavLink>
           <a href={`${import.meta.env.BASE_URL}docs/admin-guide`} target="_blank" rel="noopener"><Icon name="link" />Docs</a>
         </nav>

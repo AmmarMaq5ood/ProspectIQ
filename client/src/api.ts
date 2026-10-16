@@ -127,7 +127,7 @@ export function outOfCredits(c: { credits: { monthly: number; resets_label: stri
 }
 
 export const ctxLabel = (c: string): string => {
-  const map: Record<string, string> = { 'research:ask': 'Scout', 'research:people': 'People', 'research:companies': 'Companies', 'research:industries': 'Industries', 'research:lookup': 'Company lookup', usage: 'Usage page', 'admin:draft': 'Admin · profile draft', me: 'Sign-in' };
+  const map: Record<string, string> = { 'research:ask': 'Scout', 'research:people': 'People', 'research:companies': 'Companies', 'research:industries': 'Industries', 'research:lookup': 'Company lookup', usage: 'Usage page', 'admin:draft': 'Admin · profile draft', 'admin:waterfall': 'Waterfall test', me: 'Sign-in' };
   if (map[c]) return map[c];
   if (c.startsWith('finder:')) return `Finder · ${c.slice(7)}`;
   return c;

@@ -16,6 +16,7 @@ import { autoPushState, dayKeyIn, finderLimitText, maxFinders } from './autopush
 import { costReport, featureOf, lastMonths, monthKey } from './costs.js';
 import { isFreeMail, pickEmail, waterfall } from './treg.js';
 import { DOC_PAGES, fillPlaceholders, renderDoc } from './docs.js';
+import { parsePeopleList, sourceOf, statsFromRows } from './wfadmin.js';
 import type { Client, Finder, Person, UsageRow } from './types.js';
 
 /** Pure checks, no network: the parser, filters, samples, schedule maths, usage, drafting. */
@@ -186,6 +187,26 @@ ok('activity filters', readActivity('test', { kind: 'push' }).total === 3 && rea
   ok('docs: links between pages resolve under /docs', pages.find((d) => d.page.slug === 'overview')!.body.includes('/docs/admin-guide"'));
   ok('docs: unknown placeholders are left alone, known ones filled', fillPlaceholders('a {{daily_cap}} b {{nope}}', { daily_cap: '50' }) === 'a 50 b {{nope}}');
   ok('docs: unknown page is null', renderDoc('nope') === null);
+}
+
+
+/* ---- email waterfall admin ---- */
+{
+  const ppl = parsePeopleList('Jane Smith, acme.com\n# a comment\nJohn Q Doe www.Example.co.uk\nhttps://www.linkedin.com/in/someone-123/\nOnly Name\nMary Jones <https://linkedin.com/in/mary> acme.com\n');
+  ok('waterfall tester: parses name + domain, multi-word surnames, LinkedIn URLs; skips comments and incomplete lines', ppl.length === 4 && ppl[0].first === 'Jane' && ppl[0].last === 'Smith' && ppl[0].domain === 'acme.com' && ppl[1].last === 'Q Doe' && ppl[1].domain === 'example.co.uk' && ppl[2].linkedin === 'https://www.linkedin.com/in/someone-123/' && ppl[3].linkedin === 'https://linkedin.com/in/mary' && ppl[3].domain === 'acme.com');
+  const now = Date.UTC(2026, 9, 16, 12);
+  const rows: UsageRow[] = [
+    { t: now - 1000, ctx: 'research:ask', p: 'treg', ok: 1, ms: 4000, n: 1, model: 'verified', kind: 'prov-a', cost: 0.012 },
+    { t: now - 2000, ctx: 'finder:abc', p: 'treg', ok: 1, ms: 6000, n: 1, model: 'unverified', kind: 'prov-b', cost: 0.008 },
+    { t: now - 3000, ctx: 'admin:waterfall', p: 'treg', ok: 1, ms: 5000, n: 0, model: 'none', cost: 0 },
+    { t: now - 4000, ctx: 'research:ask', p: 'treg', ok: 0, ms: 30000, err: 'timeout' },
+    { t: now - 40 * 86400000, ctx: 'research:ask', p: 'treg', ok: 1, ms: 1000, n: 1, model: 'verified', cost: 0.01 },
+    { t: now - 500, ctx: 'research:ask', p: 'apollo', ok: 1, ms: 100, ep: '/people/match', n: 1, credit: 1 },
+  ];
+  const st = statsFromRows([{ slug: 'a', name: 'Acme', rows }], 30, now);
+  ok('waterfall stats: counts tried, found, verified, errors, cost within the period, ignores other providers', st.totals.tried === 4 && st.totals.found === 2 && st.totals.verified === 1 && st.totals.errors === 1 && Math.abs(st.totals.cost - 0.02) < 1e-9);
+  ok('waterfall stats: hit rate on calls that answered, verified share, cost per email', Math.abs(st.totals.hit_rate - 2 / 3) < 1e-9 && st.totals.verified_share === 0.5 && Math.abs(st.totals.cost_per_email - 0.01) < 1e-9);
+  ok('waterfall stats: by source and by day, recent newest first', st.by_source.length === 3 && sourceOf('finder:x') === 'Daily finders' && sourceOf('admin:waterfall') === 'Tests' && st.by_day.length === 1 && st.by_day[0].tried === 4 && st.recent[0].t === now - 1000 && st.recent[3].err === 'timeout');
 }
 
 console.log(process.exitCode ? `FAILURES in ${n} checks` : `all ${n} checks pass`);

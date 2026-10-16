@@ -17,6 +17,7 @@ import { draftNote, lpOf, lpReady, lpUrl, pushProspect, roleFromTitle, sizeBucke
 import { countSpent, fillEmails, pushCompanies, pushPeople, waterfallPlan } from './push.js';
 import { createFinder, describe, listFinders, nextRun, runAndSave, saveFinders } from './finders.js';
 import { usageCompute, usageRead, type UsageSummary } from './usage.js';
+import { parsePeopleList, readTests, testFromSearch, testPeople, waterfallStats } from './wfadmin.js';
 import { clientDir, readJson, writeJson } from './store.js';
 import type { Client, Finder, Org, Person, Profile, RecentSearch } from './types.js';
 
@@ -507,6 +508,31 @@ admin.get('/costs', (req, res) => {
   const clients = listClients().map((c) => ({ slug: c.slug, name: c.name, timezone: c.launchpad.timezone || 'UTC', rows: usageReadSince(c.slug, since) }));
   res.json(costReport(clients, { months, selected: String(req.query.month || ''), creditCost: agencySettings().credit_cost }));
 });
+
+/* ---- the email waterfall: how it has done, and a tester that pushes nothing ---- */
+
+admin.get('/waterfall', (req, res) => {
+  const days = Math.max(1, Math.min(365, Number(req.query.days) || 30));
+  const key = !!agencySettings().keys.treg || !!config.tregKey;
+  const clients = listClients().map((c) => ({ slug: c.slug, name: c.name, waterfall: !!c.flags.email_waterfall, has_apollo: !!effectiveKeys(c).apollo }));
+  res.json({ ...waterfallStats(days), tests: readTests(100), key_set: key, clients });
+});
+
+admin.post('/waterfall/test', wrap(async (req, res) => {
+  const c = getClient(String(req.body?.client || ''));
+  if (!c) return res.status(404).json({ error: 'Pick a client to log the lookups under.' });
+  const people = parsePeopleList(String(req.body?.text || '')).slice(0, 20);
+  if (!people.length) return res.status(400).json({ error: 'No people found: one per line, a name and a company domain, or a LinkedIn URL.' });
+  res.json({ rows: await testPeople(c, people) });
+}));
+
+admin.post('/waterfall/search', wrap(async (req, res) => {
+  const c = getClient(String(req.body?.client || ''));
+  if (!c) return res.status(404).json({ error: 'Pick a client to search as.' });
+  const q = String(req.body?.q || '').trim().slice(0, 300);
+  if (!q) return res.status(400).json({ error: 'Type a request, as a client would on Scout.' });
+  res.json(await testFromSearch(c, q, Number(req.body?.n) || 10));
+}));
 
 admin.post('/link/rotate', (_req, res) => {
   rotateLinkSecret();

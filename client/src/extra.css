@@ -276,3 +276,8 @@ html[data-admin-theme="dark"] .admin-app .ctrend-col.on .ctrend-seg.research { b
 html[data-admin-theme="dark"] .admin-app .ctrend-seg.waterfall, html[data-admin-theme="dark"] .admin-app .legend i.sw-waterfall { background: #8b5cf6; }
 .wfbox { margin-top: 16px; padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--r); background: var(--surface-2); }
 .wfbox .hint { margin: 8px 0 0; }
+
+/* Email waterfall page */
+.wf-list { min-height: 140px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
+.wf-tests td .t { font-weight: 500; }
+.wf-tests td .m { color: var(--muted); font-size: 12px; }

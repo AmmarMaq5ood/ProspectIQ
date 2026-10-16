@@ -52,6 +52,12 @@ The client's own log and usage, the same views the client sees, plus the entries
 - **Cost per lookup credit**: what the agency pays per credit, used by the Costs page.
 - **API keys**: the research database, the AI model and the email waterfall. Keys are shown masked once saved. **Remove** clears one. A key pasted here is used by every client without a key of their own.
 
+## Email waterfall
+
+The waterfall's own page: every lookup the app made, from pushes, daily finders and the tester, with the four numbers that matter: the hit rate on people the research database had no email for, the share that came back verified, the cost per found email, and the average seconds per lookup against the 30-second budget a push allows.
+
+**Try it** runs real lookups without pushing anything and without charging any client. *Paste people* takes a name and company domain per line, or a LinkedIn URL, and is the way to check accuracy on people whose email you already know. *From a Scout search* mirrors a push: it reads the request, searches, reveals each person (a research credit only when the database returns an email), then runs the waterfall on the rest. Results stay in the test history; the lookups also show on the Costs page as "Waterfall tests".
+
 ## Costs
 
 Pick a month. The page shows the agency's spend by account, by feature (Scout, the research tabs, company lookups, daily finders, the email waterfall), by AI model and by day, with searches, lookups, credits, AI calls, tokens and errors. Costs come from the usage log, so they cover every call the app made, not only the pushes.

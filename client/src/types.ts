@@ -291,5 +291,20 @@ export interface Overview {
   clients: { slug: string; name: string; enabled: boolean; connected: boolean; credits: Credits; finders: number; last: Activity | null }[];
 }
 
+export interface WaterfallLine { tried: number; found: number; verified: number; errors: number; cost: number; ms: number }
+export interface WaterfallTestRow { t: number; client: string; mode: 'list' | 'search'; q?: string; first: string; last: string; domain: string; company?: string; title?: string; linkedin?: string; db_email?: string; email: string; verified: boolean; provider: string; cost: number; ms: number; status: 'found' | 'none' | 'error' | 'had_email' | 'skipped'; err?: string }
+export interface WaterfallReport {
+  days: number;
+  totals: WaterfallLine & { hit_rate: number; verified_share: number; cost_per_email: number; ms_avg: number };
+  by_day: ({ day: string } & WaterfallLine)[];
+  by_client: ({ slug: string; name: string } & WaterfallLine)[];
+  by_source: ({ source: string } & WaterfallLine)[];
+  recent: { t: number; client: string; source: string; ok: boolean; found: boolean; verified: boolean; provider: string; cost: number; ms: number; err?: string }[];
+  tests: WaterfallTestRow[];
+  key_set: boolean;
+  clients: { slug: string; name: string; waterfall: boolean; has_apollo: boolean }[];
+}
+export interface WaterfallSearchTest { summary: string; total: number; rows: WaterfallTestRow[]; db_emails: number }
+
 export type AdminActivity = Omit<Activity, 'items'> & { client: string; slug: string };
 export interface AdminActivityPage { rows: AdminActivity[]; total: number; page: number; pages: number; per: number }
