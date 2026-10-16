@@ -24,6 +24,12 @@ It is not for consumer businesses. The research database holds business contacts
 | **Activity** | Every push, finder run, search and credit change, newest first. |
 | **Usage** | Searches, lookups and credits by day and by feature. |
 
+![Scout](img/scout-landing.png)
+*Scout. The client describes the buyers in plain words; the agency's templates give a head start.*
+
+![Results](img/scout-results.png)
+*Results. The "Understood as" row shows how the request was read, every lead carries a reason it fits, and nothing is pushed until it is ticked.*
+
 ## What a push creates in Launchpad
 
 For each ticked lead:
@@ -58,6 +64,9 @@ The research database returns a work email for most decision-makers at mid-size 
 
 The agency can change the daily cap and the finders-at-a-time limit for each client. When the cap is reached, finders pause until the next day.
 
+![Daily finders](img/finders.png)
+*Daily finders. Each one shows its schedule, last and next run, and the account's progress against the daily cap.*
+
 ## How requests are read
 
 AI reads each request into titles, seniority, department, industry, location, company size, revenue, technologies and keywords, then writes a one-line "why they fit" for every result. A built-in parser covers the same ground when no AI key is set. The client sees the reading as "Understood as" chips and can change every condition on the filter tabs.
@@ -70,6 +79,12 @@ AI reads each request into titles, seniority, department, industry, location, co
 - **Settings**: the one menu link that works for every sub-account, the support email, and the API keys, shown masked.
 
 The [admin guide](admin-guide) covers each screen.
+
+![The admin Overview: totals across clients and the activity feed](img/admin-overview.png)
+*The admin Overview: totals across clients and the activity feed.*
+
+![The Email waterfall page: hit rate, verified share, cost per email and speed, with a tester that pushes nothing](img/admin-waterfall.png)
+*The Email waterfall page: hit rate, verified share, cost per email and speed, with a tester that pushes nothing.*
 
 ## Data, access and privacy
 

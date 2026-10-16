@@ -79,6 +79,11 @@ export function renderDoc(slug: string): RenderedDoc | null {
   });
   // Tables scroll sideways on narrow screens instead of widening the page.
   body = body.replace(/<table>([\s\S]*?)<\/table>/g, '<div class="tbl"><table>$1</table></div>');
+  // Screenshots live in docs/img; the line in italics right after one is its caption.
+  body = body
+    .replace(/src="img\//g, `src="${values.base}/docs/img/`)
+    .replace(/<p>(<img [^>]*>)\s*<em>([\s\S]*?)<\/em><\/p>/g, '<p>$1</p><p class="cap">$2</p>')
+    .replace(/(<p><img [^>]*><\/p>)\s*<p><em>([\s\S]*?)<\/em><\/p>/g, '$1<p class="cap">$2</p>');
   // Relative links between pages ("client-guide", "admin-guide#credits") resolve under /docs/.
   body = body.replace(/href="(overview|client-guide|admin-guide|changelog)(#[^"]*)?"/g, (_m, s: string, h = '') => `href="${values.base}/docs/${s}${h}"`);
 
@@ -101,6 +106,9 @@ function layout(page: DocPage, body: string, toc: { id: string; text: string }[]
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
+<link rel="icon" type="image/svg+xml" href="${v.base}/favicon.svg">
+<link rel="apple-touch-icon" href="${v.base}/apple-touch-icon.png">
+<meta name="theme-color" content="#155eef">
 <title>${esc(page.title)} · ProspectIQ</title>
 <style>
 :root { color-scheme: light; --bg: #ffffff; --page: #f3f4f6; --surface: #ffffff; --border: #e5e7eb; --border-2: #d1d5db; --text: #111827; --text-2: #374151; --muted: #6b7280; --primary: #155eef; --primary-soft: #eff4ff; --primary-line: #b2ccff; --accent: #f26a2a; --code: #f3f4f6; }
@@ -147,6 +155,8 @@ article th { background: var(--surface); font-weight: 600; }
 article tr:nth-child(even) td { background: var(--surface); }
 article blockquote { margin: 0 0 14px; padding: 8px 14px; border-left: 3px solid var(--primary-line); background: var(--primary-soft); color: var(--text-2); }
 article hr { border: 0; border-top: 1px solid var(--border); margin: 24px 0; }
+article img { display: block; max-width: 100%; height: auto; margin: 6px 0 4px; border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06); }
+article p.cap { margin: 0 0 18px; font-size: 13px; color: var(--muted); }
 .topbar { display: none; }
 @media (max-width: 900px) {
   .wrap { grid-template-columns: minmax(0, 1fr); }
@@ -197,6 +207,7 @@ export function docsRouter(): express.Router {
     if (!d) return res.status(404).send(notFoundPage());
     return res.send(d.html);
   };
+  r.use('/img', express.static(path.join(DOCS_DIR, 'img'), { maxAge: '1d', index: false }));
   r.get('/', (_req, res) => send(res, 'overview'));
   r.get('/:slug', (req, res) => send(res, String(req.params.slug).toLowerCase()));
   return r;

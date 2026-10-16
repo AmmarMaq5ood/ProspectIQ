@@ -15,7 +15,7 @@ import { logActivity, readActivity, readActivityAll } from './activity.js';
 import { autoPushState, dayKeyIn, finderLimitText, maxFinders } from './autopush.js';
 import { costReport, featureOf, lastMonths, monthKey } from './costs.js';
 import { isFreeMail, pickEmail, waterfall } from './treg.js';
-import { DOC_PAGES, fillPlaceholders, renderDoc } from './docs.js';
+import { DOC_PAGES, DOCS_DIR, fillPlaceholders, renderDoc } from './docs.js';
 import { parsePeopleList, sourceOf, statsFromRows } from './wfadmin.js';
 import type { Client, Finder, Person, UsageRow } from './types.js';
 
@@ -187,6 +187,8 @@ ok('activity filters', readActivity('test', { kind: 'push' }).total === 3 && rea
   ok('docs: links between pages resolve under /docs', pages.find((d) => d.page.slug === 'overview')!.body.includes('/docs/admin-guide"'));
   ok('docs: unknown placeholders are left alone, known ones filled', fillPlaceholders('a {{daily_cap}} b {{nope}}', { daily_cap: '50' }) === 'a 50 b {{nope}}');
   ok('docs: unknown page is null', renderDoc('nope') === null);
+  const imgs = DOC_PAGES.flatMap((p) => [...fs.readFileSync(path.join(DOCS_DIR, p.file), 'utf8').matchAll(/\]\(img\/([^)]+)\)/g)].map((m) => m[1]));
+  ok('docs: every screenshot a guide references exists and is captioned', imgs.length >= 6 && imgs.every((f) => fs.existsSync(path.join(DOCS_DIR, 'img', f))) && pages.find((d) => d.page.slug === 'overview')!.body.includes('<p class="cap">'));
 }
 
 

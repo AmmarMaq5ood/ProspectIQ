@@ -18,6 +18,9 @@ Scout is the first tab and the quickest way to work.
 
 Under the search box, **Recent searches**, **Daily Leads Finders** and **Templates** give you a head start. Templates are ready-made requests your Launchpad team wrote for your business.
 
+![The Scout tab before a search](img/scout-landing.png)
+*The Scout tab before a search. Click a template or type your own request.*
+
 ## Reading the results
 
 Each person shows first name, a masked surname, title, company and location, plus pills: **email** when a work email is on file, **phone** and **location** when known, and **already a contact** when the person is in your Launchpad. A one-line reason under each result says why they fit your request.
@@ -26,6 +29,9 @@ Each person shows first name, a masked surname, title, company and location, plu
 - **Hide contacts already in Launchpad** removes those rows so the page shows only new people.
 - The **Role** menu on each person sets the Role field on the contact in Launchpad.
 - Company results show industry, size, headquarters and revenue, with a **people here** link that searches that company's buyers.
+
+![A search with three matches](img/scout-results.png)
+*A search with three matches. The pills under each person show what is on file; the bar at the bottom counts what you ticked and the credits the push can use.*
 
 ## Pushing to Launchpad
 
@@ -61,6 +67,9 @@ A finder is a saved search that runs on its own.
 4. Press **Save as a daily finder**.
 
 The **Daily finders** tab lists them. **Run now** pulls today's batch immediately. Each finder can be paused or removed.
+
+![The Daily finders tab, with the day's automatic-push count and one finder running on weekdays](img/finders.png)
+*The Daily finders tab, with the day's automatic-push count and one finder running on weekdays.*
 
 Limits worth knowing:
 

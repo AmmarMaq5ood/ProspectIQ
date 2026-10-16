@@ -10,9 +10,15 @@ Open {{app_url}}/admin and enter the admin key. The sidebar has Overview, Client
 
 Totals across all clients and the agency-wide activity feed, newest first. The feed is paged and can be filtered by kind (pushes, finder runs, searches, credits, admin changes) and by client.
 
+![Overview](img/admin-overview.png)
+*Overview. Click a client in the table to manage it.*
+
 ## Adding a client
 
 Clients → **New client**, then work through the sections on the client page.
+
+![A client page](img/admin-client.png)
+*A client page. The sections down the left side are the steps below.*
 
 1. **Launchpad connection**. The sub-account's location id, a private integration token, the Launchpad app address and the outreach pipeline. **Test connection** lists the sub-account's pipelines so you can pick one. Save the location id: it is how the one menu link finds this client.
 2. **Profile**. What they sell, who buys it, the industries to search, the roles to assign and the outreach angles. **Draft with GPT** reads the client's website and writes a first pass; edit it before saving. The profile shapes how requests are read, which titles Company lookup searches for and what the research notes say.
@@ -57,6 +63,9 @@ The client's own log and usage, the same views the client sees, plus the entries
 The waterfall's own page: every lookup the app made, from pushes, daily finders and the tester, with the four numbers that matter: the hit rate on people the research database had no email for, the share that came back verified, the cost per found email, and the average seconds per lookup against the 30-second budget a push allows.
 
 **Try it** runs real lookups without pushing anything and without charging any client. *Paste people* takes a name and company domain per line, or a LinkedIn URL, and is the way to check accuracy on people whose email you already know. *From a Scout search* mirrors a push: it reads the request, searches, reveals each person (a research credit only when the database returns an email), then runs the waterfall on the rest. Results stay in the test history; the lookups also show on the Costs page as "Waterfall tests".
+
+![The Email waterfall page with a month of lookups](img/admin-waterfall.png)
+*The Email waterfall page with a month of lookups.*
 
 ## Costs
 
