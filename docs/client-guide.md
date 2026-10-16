@@ -78,6 +78,18 @@ Limits worth knowing:
 - A finder skips anyone already in Launchpad and only pushes new people, each with a note on why they fit.
 - People finders spend up to the chosen number of credits per run. Company finders spend none.
 
+## Targeting
+
+The **Targeting** tab is where you describe who you most want to reach: job titles or title words, seniority, department, industries, locations, company size, revenue, and anything to exclude (titles, industries, locations, companies). Save it once. From then on:
+
+- Every result on Scout and the filter tabs is checked against it. A lead that meets every condition that could be checked is an **ICP match**, shown as a hot lead and sorted first. A lead that meets at least half is a **target match**, shown as high priority. Hover the pill to see which conditions matched, which did not, and which are not known yet.
+- **Select → ICP matches** ticks the hot leads on the page in one go.
+- Company size, revenue and industry are confirmed when a lead is revealed during a push, so a target match can become an ICP match at that point.
+- In Launchpad each pushed contact gets the fields **ICP Match** (ICP match, Target match or No match), **Lead Priority** (Hot, High or Normal) and **Research Summary**, two or three sentences on who they are and why they fit, plus the tags `icp-match` and `hot-lead`, or `target-match` and `high-priority`. Workflows can route on any of them.
+- A daily finder can be set to **only push ICP matches** (the checkbox when you save it, or the ICP only button on the finder). It then skips everything else and reads further pages to fill its count. The Targeting tab has a switch that makes this the default for new finders.
+
+Nothing set on the tab means nothing changes: searches and finders work exactly as before.
+
 ## Credits
 
 - Searching is free. A credit is spent only when a person lands in Launchpad as a **new contact with a work email**. Company pushes and updates to existing contacts are free.

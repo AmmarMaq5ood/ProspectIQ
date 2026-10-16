@@ -64,6 +64,7 @@ export function FindersList({ refreshKey = 0, onChange }: { refreshKey?: number;
                   <span><Icon name="clock" />{f.when}</span>
                   <span><Icon name="refresh" />{f.last_run ? `Last run ${fmtWhen(f.last_run, tz)}` : 'Never run'}</span>
                   <span><Icon name="calendar" />Next {fmtWhen(f.next, tz, true)}</span>
+                  {f.icp_only && <span><Icon name="filter" />ICP matches only</span>}
                 </div>
                 {f.last_result && <div className="res"><Icon name="spark" />{f.last_result}</div>}
                 <div className="links">
@@ -73,6 +74,7 @@ export function FindersList({ refreshKey = 0, onChange }: { refreshKey?: number;
               </div>
               <div className="rowtools" style={{ margin: 0 }}>
                 <button className="btn sm" type="button" onClick={() => act('Run', () => busy.run('Running the finder… searching, looking leads up and writing them into Launchpad', async () => { const r = await api<RunResult & { seen?: unknown }>(`/finders/${f.id}/run`, { body: {} }); setRun(r); }))}><Icon name="refresh" />Run now</button>
+                <button className="btn secondary sm" type="button" title="Push only leads that meet every condition on the Targeting tab" onClick={() => act('ICP', () => api(`/finders/${f.id}/icp`, { body: {} }))}><Icon name="filter" />{f.icp_only ? 'ICP only: on' : 'ICP only: off'}</button>
                 <button className="btn secondary sm" type="button" onClick={() => act('Toggle', () => api(`/finders/${f.id}/toggle`, { body: {} }))}>{f.enabled ? 'Pause' : 'Resume'}</button>
                 <button className="btn ghost sm danger" type="button" onClick={() => { if (confirm('Remove this finder?')) act('Remove', () => api(`/finders/${f.id}`, { method: 'DELETE' })); }}><Icon name="trash" />Remove</button>
               </div>

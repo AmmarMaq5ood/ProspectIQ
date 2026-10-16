@@ -17,7 +17,8 @@ import { costReport, featureOf, lastMonths, monthKey } from './costs.js';
 import { isFreeMail, pickEmail, waterfall } from './treg.js';
 import { DOC_PAGES, DOCS_DIR, fillPlaceholders, isTeam, notFoundPage, renderDoc } from './docs.js';
 import { parsePeopleList, sourceOf, statsFromRows } from './wfadmin.js';
-import type { Client, Finder, Person, UsageRow } from './types.js';
+import type { Client, Finder, Person, UsageRow, Org } from './types.js';
+import { blankTargeting, cleanTargeting, matchOrg, matchPerson, matchText, mentions, summaryRule, tagsFor, targetingActive } from './icp.js';
 
 /** Pure checks, no network: the parser, filters, samples, schedule maths, usage, drafting. */
 
@@ -71,7 +72,7 @@ ok('next run from Sat is Mon 08:30', new Intl.DateTimeFormat('en-US', { timeZone
 ok('describe', describe({ ...fd, start: 0 }, tz) === '5 a day at 08:30, weekdays');
 ok('not twice a day', !isDue({ ...fd, last_run: mon - 60000 }, tz, mon));
 
-const client: Client = { slug: 'test', name: 'Test', access_key: 'k', enabled: true, created: 0, launchpad: { location_id: '', token: '', app_url: '', pipeline: 'Business Development', quote_stage: '', owner: '', timezone: tz, users: {} }, keys: { openai: '', openai_model: '', apollo: '', treg: '' }, credits: { monthly: 1000, used: 0, period: '2026-10', extra: 0 }, flags: { show_usage: false, show_activity: true, email_waterfall: false }, auto_push: { daily: 50, day: '', used: 0 }, profile: ARTMARK_PROFILE };
+const client: Client = { slug: 'test', name: 'Test', access_key: 'k', enabled: true, created: 0, launchpad: { location_id: '', token: '', app_url: '', pipeline: 'Business Development', quote_stage: '', owner: '', timezone: tz, users: {} }, keys: { openai: '', openai_model: '', apollo: '', treg: '' }, credits: { monthly: 1000, used: 0, period: '2026-10', extra: 0 }, flags: { show_usage: false, show_activity: true, email_waterfall: false }, auto_push: { daily: 50, day: '', used: 0 }, targeting: blankTargeting(), profile: ARTMARK_PROFILE };
 process.env.DATA_DIR = process.env.DATA_DIR || './data-test';
 const run = await runFinder(client, { ...fd, per_run: 4 }, false);
 ok('finder sample run: 4 leads, nothing written', run.ok && run.pushed.length === 4 && /Sample run/.test(run.text) && run.seen.length >= 4);
@@ -221,6 +222,36 @@ ok('activity filters', readActivity('test', { kind: 'push' }).total === 3 && rea
   ok('waterfall stats: counts tried, found, verified, errors, cost within the period, ignores other providers', st.totals.tried === 4 && st.totals.found === 2 && st.totals.verified === 1 && st.totals.errors === 1 && Math.abs(st.totals.cost - 0.02) < 1e-9);
   ok('waterfall stats: hit rate on calls that answered, verified share, cost per email', Math.abs(st.totals.hit_rate - 2 / 3) < 1e-9 && st.totals.verified_share === 0.5 && Math.abs(st.totals.cost_per_email - 0.01) < 1e-9);
   ok('waterfall stats: by source and by day, recent newest first', st.by_source.length === 3 && sourceOf('finder:x') === 'Daily finders' && sourceOf('admin:waterfall') === 'Tests' && st.by_day.length === 1 && st.by_day[0].tried === 4 && st.recent[0].t === now - 1000 && st.recent[3].err === 'timeout');
+}
+
+
+/* ---- targeting / ICP ---- */
+{
+  const t = cleanTargeting({ titles: ['purchasing manager', 'Sourcing'], industries: ['valves', 'pumps'], locations: ['Texas'], employee_ranges: ['51,100', '101,200'], revenue_min: '5000000', exclude: { titles: ['intern'], companies: ['Acme Rivals'] }, finders_icp_only: true });
+  ok('targeting: cleaned lists, numbers and defaults', t.titles.length === 2 && t.revenue_min === 5000000 && t.revenue_max === 0 && t.exclude.industries.length === 0 && t.finders_icp_only && targetingActive(t) && !targetingActive(blankTargeting()));
+  const org = (over: Partial<Org>): Org => ({ id: 'o', name: 'Lone Star Valves', domain: 'lsv.com', website: '', industry: 'industrial valves', industries: [], employees: 120, city: 'Austin', state: 'Texas', country: 'United States', phone: '', linkedin: '', logo: '', founded: 0, revenue: '12M', revenue_n: 12000000, growth12: null, sic: [], naics: [], description: '', keywords: [], enriched: true, ...over });
+  const person = (over: Partial<Person>): Person => ({ id: 'p', first: 'Dana', last: 'Ward', last_obf: false, title: 'Purchasing Manager', seniority: 'manager', linkedin: '', email: '', has_email: false, has_phone: false, city: 'Austin, Texas', has_city: true, company: 'Lone Star Valves', company_id: '', domain: 'lsv.com', departments: [], org: org({}), ...over });
+  const full = matchPerson(t, person({}))!;
+  ok('targeting: every condition met is an ICP match', full.level === 'icp' && full.hits.length === 5 && full.misses.length === 0);
+  const half = matchPerson(t, person({ title: 'Plant Manager', org: org({ employees: 5000 }) }))!;
+  ok('targeting: most conditions met is a target match, with the misses named', half.level === 'target' && half.misses.includes('title') && half.misses.includes('company size') && /differ/.test(matchText(half)));
+  const none = matchPerson(t, person({ title: 'Marketing Intern', org: org({ industry: 'advertising', employees: 9, revenue_n: 100000, state: 'Ohio' }) }))!;
+  ok('targeting: exclusions win and read as such', none.level === 'none' && !!none.excluded && /Excluded/.test(matchText(none)));
+  const unknown = matchPerson(t, person({ org: undefined, city: '' }))!;
+  ok('targeting: unknown company facts never count as misses', unknown.level === 'target' && unknown.unknown.length === 4 && unknown.hits.length === 1 && unknown.misses.length === 0 && /not known yet/.test(matchText(unknown)));
+  ok('targeting: words match in any order, plural forms, and not by accident', mentions('Manager, Purchasing & Supply', 'purchasing manager') && mentions('Industrial Valves Inc', 'valve') && !mentions('Sales Manager', 'purchasing') && mentions('Austin, TX, United States', 'US', true));
+  ok('targeting: tags per level', tagsFor(full).join() === 'icp-match,hot-lead' && tagsFor(half).join() === 'target-match,high-priority' && tagsFor(none).length === 0);
+  const sum = summaryRule(person({}), full, t, ARTMARK_PROFILE);
+  ok('targeting: the rule summary says who, fit and priority', /Dana Ward is Purchasing Manager at Lone Star Valves/.test(sum) && /Hot lead/.test(sum) && /title/.test(sum));
+  const co = matchOrg(t, org({}))!;
+  ok('targeting: companies match on the company conditions only', co.level === 'icp' && co.hits.length === 4);
+  // a finder set to ICP-only pushes the matches alone. Sample people all share one title here, so the
+  // targeting matches on the title and excludes one company; the run must skip that company and keep the rest.
+  const anyRun = await runFinder(client, { ...fd, per_run: 5, icp_only: true, seen: [] }, false);
+  const skipCo = anyRun.pushed[0]?.company || '';
+  const tc: Client = { ...client, targeting: cleanTargeting({ titles: ['supply chain'], exclude: { companies: [skipCo] } }) };
+  const icpRun = await runFinder(tc, { ...fd, per_run: 5, icp_only: true, seen: [] }, false);
+  ok('finder ICP-only: skips leads that do not meet the targeting, keeps the rest, and does nothing special without a targeting', !!skipCo && (icpRun.icp_skipped || 0) > 0 && icpRun.pushed.length >= 1 && icpRun.pushed.every((p) => p.company !== skipCo) && /not an ICP match/.test(icpRun.text) && (anyRun.icp_skipped || 0) === 0 && anyRun.pushed.length === 5);
 }
 
 console.log(process.exitCode ? `FAILURES in ${n} checks` : `all ${n} checks pass`);

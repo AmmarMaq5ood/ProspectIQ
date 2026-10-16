@@ -17,6 +17,7 @@ import Scout from './pages/Scout';
 import Research from './pages/Research';
 import Lookup from './pages/Lookup';
 import Finders from './pages/Finders';
+import TargetingPage from './pages/Targeting';
 import Usage from './pages/Usage';
 import Admin from './pages/Admin';
 import AdminClient from './pages/AdminClient';
@@ -95,6 +96,7 @@ export default function App() {
             <Route path="industries" element={<Research key="industries" mode="industries" />} />
             <Route path="lookup" element={<Lookup />} />
             <Route path="finders" element={<Finders />} />
+            <Route path="targeting" element={<TargetingPage />} />
             <Route path="activity" element={<Activity />} />
             <Route path="usage" element={<Usage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
@@ -137,6 +139,7 @@ function Shell() {
         <NavLink to="/industries" className={on}><Icon name="chart" />Industries</NavLink>
         <NavLink to="/lookup" className={on}><Icon name="link" />Company lookup</NavLink>
         <NavLink to="/finders" className={on}><Icon name="calendar" />Daily finders</NavLink>
+        <NavLink to="/targeting" className={on}><Icon name="filter" />Targeting</NavLink>
         {(c.show_activity || me.admin) && <NavLink to="/activity" className={on}><Icon name="clock" />Activity</NavLink>}
         {(c.show_usage || me.admin) && <NavLink to="/usage" className={on}><Icon name="chart" />Usage</NavLink>}
       </nav>

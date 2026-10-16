@@ -75,6 +75,9 @@ export interface Person {
   /** Where the email came from when the research database had none ('waterfall'), and whether it verified. */
   email_source?: 'research' | 'waterfall';
   email_verified?: boolean;
+  /** The targeting verdict (set on search results and again after the reveal) and the written summary (push time). */
+  icp?: IcpMatch;
+  summary?: string;
 }
 
 export interface Org {
@@ -122,6 +125,26 @@ export interface Profile {
   default_titles: string[];
 }
 
+/** The ideal customer profile: who the client most wants. Empty lists mean "any". */
+export interface Targeting {
+  titles: string[];
+  seniorities: string[];
+  departments: string[];
+  industries: string[];
+  locations: string[];
+  employee_ranges: string[];
+  revenue_min: number;
+  revenue_max: number;
+  exclude: { titles: string[]; industries: string[]; locations: string[]; companies: string[] };
+  /** New finders push only ICP matches unless told otherwise. */
+  finders_icp_only: boolean;
+  updated: number;
+}
+
+export type MatchLevel = 'icp' | 'target' | 'none';
+/** How a lead compares with the targeting: which conditions it met, missed, or could not be checked yet. */
+export interface IcpMatch { level: MatchLevel; hits: string[]; misses: string[]; unknown: string[]; of: number; excluded?: string; why: string[] }
+
 export interface Client {
   slug: string;
   name: string;
@@ -151,6 +174,8 @@ export interface Client {
   /** Daily cap on what the finders push, across all of them: `used` counts leads pushed on `day` (client's timezone). */
   auto_push: { daily: number; day: string; used: number; /** finders allowed to run at the same time (default 2) */ max_finders?: number };
   profile: Profile;
+  /** What gets highlighted, tagged, and what finders may push alone. */
+  targeting: Targeting;
 }
 
 export interface CreditEntry { t: number; delta: number; reason: string; by: string; left: number }
@@ -166,6 +191,8 @@ export interface Finder {
   start: number;
   repeat: 'daily' | 'weekdays' | 'weekly';
   notify: boolean;
+  /** Push only leads that meet every targeting condition. */
+  icp_only?: boolean;
   enabled: boolean;
   created: number;
   last_run: number;
@@ -199,7 +226,7 @@ export interface UsageRow {
 
 export interface PushResult {
   company: { name: string; id: string };
-  contacts: { name: string; role: string; id: string; new: boolean; email: string; email_source?: 'research' | 'waterfall'; email_verified?: boolean }[];
+  contacts: { name: string; role: string; id: string; new: boolean; email: string; email_source?: 'research' | 'waterfall'; email_verified?: boolean; priority?: string; icp?: string }[];
   note_added: boolean;
   opportunity: { id: string; name: string; created: boolean };
   log: string[];

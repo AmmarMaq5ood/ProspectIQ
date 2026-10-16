@@ -9,10 +9,12 @@ import { CreditsRing, Num, Switch } from '../components/Motion';
 import { fmtWhen, nf } from '../api';
 import Usage from './Usage';
 import Activity from './Activity';
+import { useApp } from '../App';
+import { TargetingForm } from '../components/TargetingForm';
 import type { Angle, Client, CreditEntry, Credits, FinderView, MenuLink, Profile, AutoPush, SecretState } from '../types';
 
-type Tab = 'launchpad' | 'profile' | 'templates' | 'credits' | 'keys' | 'access' | 'finders' | 'activity' | 'usage';
-const TABS: [Tab, string, string][] = [['launchpad', 'Launchpad connection', 'link'], ['profile', 'Profile', 'building'], ['templates', 'Templates', 'list'], ['credits', 'Credits & visibility', 'chart'], ['keys', 'Keys', 'key'], ['access', 'Access & links', 'external'], ['finders', 'Finders', 'calendar'], ['activity', 'Activity', 'clock'], ['usage', 'Usage', 'chart']];
+type Tab = 'launchpad' | 'profile' | 'targeting' | 'templates' | 'credits' | 'keys' | 'access' | 'finders' | 'activity' | 'usage';
+const TABS: [Tab, string, string][] = [['launchpad', 'Launchpad connection', 'link'], ['profile', 'Profile', 'building'], ['targeting', 'Targeting', 'filter'], ['templates', 'Templates', 'list'], ['credits', 'Credits & visibility', 'chart'], ['keys', 'Keys', 'key'], ['access', 'Access & links', 'external'], ['finders', 'Finders', 'calendar'], ['activity', 'Activity', 'clock'], ['usage', 'Usage', 'chart']];
 
 interface Loaded { client: Client; links: MenuLink[]; finders: FinderView[] }
 
@@ -74,6 +76,7 @@ export default function AdminClient() {
           setOk('Drafted from the website. Read it through, fix anything, then Save profile.');
         } catch (e) { setErr(errText(e)); }
       }} />}
+      {tab === 'targeting' && <TargetingTab c={c} set={set} onSave={() => save({ targeting: c.targeting }, 'Targeting')} />}
       {tab === 'templates' && <TemplatesTab c={c} set={set} onSave={() => save({ profile: c.profile }, 'Templates')} />}
       {tab === 'credits' && <CreditsTab c={c} slug={slug} onToggleUsage={(v) => { set((x) => { x.flags.show_usage = v; }); save({ flags: { show_usage: v } }, 'Visibility'); }} onToggleActivity={(v) => { set((x) => { x.flags.show_activity = v; }); save({ flags: { show_activity: v } }, 'Visibility'); }} />}
       {tab === 'keys' && <KeysTab c={c} set={set} onSave={() => save({ keys: c.keys }, 'Keys')} onClear={(k) => { if (confirm('Remove this client\'s own key? The agency key takes over.')) save({ keys: { [k]: null } }, 'Keys'); }} onWaterfall={(v) => { set((x) => { x.flags.email_waterfall = v; }); save({ flags: { email_waterfall: v } }, 'Email waterfall'); }} />}
@@ -377,5 +380,18 @@ function ReactFragmentRow({ label, value, onCopy, copied }: { label: string; val
       <dt>{label}</dt>
       <dd><span className="copyable"><code>{value}</code><button className="btn secondary sm" type="button" onClick={onCopy}><Icon name="copy" />{copied ? 'Copied' : 'Copy'}</button></span></dd>
     </>
+  );
+}
+
+/** The client's ideal customer profile, the same form they see on their Targeting tab. */
+function TargetingTab({ c, set, onSave }: { c: Client; set: (fn: (x: Client) => void) => void; onSave: () => void }) {
+  const { options } = useApp();
+  return (
+    <section className="card">
+      <h2>Targeting</h2>
+      <p className="sub">Who this client most wants to reach. Leads that meet every condition are ICP matches (hot leads); at least half makes a target match (high priority). Both are highlighted on Scout, tagged in Launchpad with icp-match, hot-lead, target-match and high-priority, and get the ICP Match, Lead Priority and Research Summary fields. Finders can be limited to ICP matches.</p>
+      <TargetingForm value={c.targeting} onChange={(t) => set((x) => { x.targeting = t; })} options={options} profile={c.profile} />
+      <SaveBar hint="Saved for the client at once; their next search uses it." label="Save targeting" onSave={onSave} />
+    </section>
   );
 }

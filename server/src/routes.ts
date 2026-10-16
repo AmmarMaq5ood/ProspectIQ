@@ -15,11 +15,12 @@ import { askIntent, draftProfile, fitLines, siteText, type LlmCtx } from './llm.
 import { sampleCompanies, sampleEnrich, sampleLookup, samplePeople } from './samples.js';
 import { draftNote, lpOf, lpReady, lpUrl, pushProspect, roleFromTitle, sizeBucket, testConnection } from './launchpad.js';
 import { countSpent, fillEmails, pushCompanies, pushPeople, waterfallPlan } from './push.js';
-import { createFinder, describe, listFinders, nextRun, runAndSave, saveFinders } from './finders.js';
+import { createFinder, describe, listFinders, nextRun, runAndSave, saveFinders, annotateTargeting } from './finders.js';
 import { usageCompute, usageRead, type UsageSummary } from './usage.js';
 import { parsePeopleList, readTests, testFromSearch, testPeople, waterfallStats } from './wfadmin.js';
 import { clientDir, readJson, writeJson } from './store.js';
 import type { Client, Finder, Org, Person, Profile, RecentSearch } from './types.js';
+import { cleanTargeting, describeTargeting, targetingActive } from './icp.js';
 
 export const api = Router();
 
@@ -142,6 +143,7 @@ api.post('/ask', requireClient('research:ask'), wrap(async (req, res) => {
   const kind = intent.kind;
   const result = kind === 'people' ? (live ? await searchPeople(apollo, filters, page, pp) : samplePeople(filters, page, pp)) : (live ? await searchCompanies(apollo, filters, page, pp) : sampleCompanies(filters, page, pp));
   if (kind === 'people') await annotateInLaunchpad(client, result.rows as Person[], live);
+  const icp = await annotateTargeting(client, result.rows, kind, apollo, live);
   const fits = await fitLines(llm, client.profile, result.rows, intent, kind, useGpt);
   if (live && page === 1) {
     recentAdd(client.slug, { q, kind, total: result.total, t: Date.now() });
@@ -150,8 +152,20 @@ api.post('/ask', requireClient('research:ask'), wrap(async (req, res) => {
   const warnings: string[] = [];
   if (intent.error) warnings.push(`GPT could not read the request (${intent.error}); the built-in parser was used.`);
   if (sample) warnings.push(!effectiveKeys(client).apollo ? 'No research key for this client yet: these are sample results.' : 'Sample mode: canned results, nothing is written.');
-  res.json({ q, intent, filters, kind, result, fits, warnings, sample });
+  res.json({ q, intent, filters, kind, result, fits, icp, warnings, sample });
 }));
+
+/* ---- targeting: the client's ideal customer profile ---- */
+
+api.get('/targeting', requireClient('targeting'), (req, res) => res.json({ targeting: req.piq!.client.targeting }));
+
+api.put('/targeting', requireClient('targeting'), (req, res) => {
+  const c = getClient(req.piq!.client.slug) || req.piq!.client;
+  c.targeting = { ...cleanTargeting(req.body), updated: Date.now() };
+  saveClient(c);
+  logActivity(c.slug, { kind: 'system', title: 'Targeting updated', detail: targetingActive(c.targeting) ? describeTargeting(c.targeting) : 'No conditions set: matching is off.', by: 'client', ok: true });
+  res.json({ client: publicClient(c) });
+});
 
 /* ---- the filter tabs ---- */
 
@@ -165,8 +179,9 @@ api.post('/search', requireClient('research:people'), wrap(async (req, res) => {
   if (!filtersActive(filters) && !sample) return res.json({ kind, filters, result: null, sample });
   const result = kind === 'people' ? (live ? await searchPeople(apollo, filters, page, pp) : samplePeople(filters, page, pp)) : (live ? await searchCompanies(apollo, filters, page, pp) : sampleCompanies(filters, page, pp));
   if (kind === 'people') await annotateInLaunchpad(req.piq!.client, result.rows as Person[], live);
+  const icp = await annotateTargeting(req.piq!.client, result.rows, kind, apollo, live);
   if (live && page === 1) logActivity(req.piq!.client.slug, { kind: 'search', title: filtersSummary(filters, kind), detail: `${result.total.toLocaleString('en-US')} ${kind} found (${req.body?.mode === 'industries' ? 'Industries' : kind === 'people' ? 'People' : 'Companies'} tab)`, by: 'client', ok: true, n: result.total });
-  res.json({ kind, filters, result, sample });
+  res.json({ kind, filters, result, icp, sample });
 }));
 
 /* ---- one company by domain ---- */
@@ -198,7 +213,7 @@ api.post('/lookup', requireClient('research:lookup'), wrap(async (req, res) => {
 /* ---- pushes ---- */
 
 api.post('/push/people', requireClient('research:ask'), wrap(async (req, res) => {
-  const { client, live, apollo, sample } = req.piq!;
+  const { client, live, apollo, sample, llm } = req.piq!;
   if (sample) return res.status(400).json({ error: 'Sample mode does not push to Launchpad.' });
   const picks = new Set((req.body?.picks || []).map(String));
   const people = ((req.body?.people || []) as Person[]).filter((p) => picks.has(String(p.id)));
@@ -207,7 +222,7 @@ api.post('/push/people', requireClient('research:ask'), wrap(async (req, res) =>
   const need = people.filter((p) => p.has_email || p.email).length;
   const blocked = creditCheck(client, need);
   if (blocked) return res.status(402).json({ error: blocked, credits_left: creditsLeft(client) });
-  const r = await pushPeople(client, people, roles, { live, apollo, waterfall: waterfallPlan(client, 'manual', 'research:push') });
+  const r = await pushPeople(client, people, roles, { live, apollo, llm, waterfall: waterfallPlan(client, 'manual', 'research:push') });
   const credits_left = r.spent ? spendCredits(client, r.spent, 'push from the research tabs') : creditsLeft(client);
   if (live) {
     const contacts = r.results.flatMap((x) => x.contacts.map((c) => ({ name: c.name, company: x.company.name, id: c.id, email: c.email })));
@@ -281,7 +296,7 @@ api.post('/finders', requireClient('finders'), wrap(async (req, res) => {
   const { client } = req.piq!;
   const blocked = finderLimitText(maxFinders(client), listFinders(client.slug).filter((f) => f.enabled).length);
   if (blocked) return res.status(400).json({ error: blocked });
-  const f = createFinder(client, req.body || {});
+  const f = createFinder(client, { ...(req.body || {}), icp_only: typeof req.body?.icp_only === 'boolean' ? req.body.icp_only : !!client.targeting.finders_icp_only });
   res.json({ finder: finderView(f, client.launchpad.timezone) });
 }));
 
@@ -302,6 +317,13 @@ api.post('/finders/:id/toggle', requireClient('finders'), (req, res) => {
   const all = current.map((f) => (f.id === req.params.id ? { ...f, enabled: !f.enabled } : f));
   saveFinders(client.slug, all);
   res.json({ ok: true });
+});
+
+api.post('/finders/:id/icp', requireClient('finders'), (req, res) => {
+  const { client } = req.piq!;
+  const all = listFinders(client.slug).map((f) => (f.id === req.params.id ? { ...f, icp_only: !f.icp_only } : f));
+  saveFinders(client.slug, all);
+  res.json({ ok: true, icp_only: !!all.find((f) => f.id === req.params.id)?.icp_only });
 });
 
 api.delete('/finders/:id', requireClient('finders'), (req, res) => {
@@ -411,6 +433,10 @@ admin.put('/clients/:slug', (req, res) => {
     }
   }
   if (b.profile && typeof b.profile === 'object') c.profile = cleanProfile({ ...c.profile, ...b.profile });
+  if (b.targeting && typeof b.targeting === 'object') {
+    c.targeting = { ...cleanTargeting(b.targeting), updated: Date.now() };
+    logActivity(c.slug, { kind: 'system', title: 'Targeting updated', detail: targetingActive(c.targeting) ? describeTargeting(c.targeting) : 'No conditions set: matching is off.', by: 'admin', ok: true });
+  }
   saveClient(c);
   res.json({ client: adminView(c), links: menuLinks(c) });
 });

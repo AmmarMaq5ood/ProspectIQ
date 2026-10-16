@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import cron from 'node-cron';
 import { clientDir, readJson, writeJson } from './store.js';
 import { effectiveKeys, listClients } from './clients.js';
-import { searchCompanies, searchPeople, type ApolloCtx } from './apollo.js';
+import { searchCompanies, searchPeople, type ApolloCtx, bulkOrgs } from './apollo.js';
 import { sampleCompanies, samplePeople } from './samples.js';
 import { cleanIntent, intentFilters } from './rules.js';
 import { fitLines, type LlmCtx } from './llm.js';
@@ -13,7 +13,8 @@ import { creditsLeft, outOfCreditsText, spendCredits } from './credits.js';
 import { autoPushLimitText, autoPushSpend, autoPushState } from './autopush.js';
 import { logActivity } from './activity.js';
 import { pushCompanies, pushPeople, waterfallPlan } from './push.js';
-import type { Client, Finder, Org, Person } from './types.js';
+import type { Client, Finder, Org, Person, IcpMatch, Kind } from './types.js';
+import { matchOrg, matchPerson, targetingActive } from './icp.js';
 
 /** Saved searches that run on their own: storage, schedule maths, one run, and the in-process scheduler. */
 
@@ -27,7 +28,7 @@ export function saveFinders(slug: string, finders: Finder[]): void {
   writeJson(file(slug), finders);
 }
 
-export function createFinder(client: Client, input: { name: string; q: string; intent: unknown; per_run: number; start: string; time: string; repeat: string; notify: boolean }): Finder {
+export function createFinder(client: Client, input: { name: string; q: string; intent: unknown; per_run: number; start: string; time: string; repeat: string; notify: boolean; icp_only?: boolean }): Finder {
   const intent = cleanIntent((input.intent || {}) as Partial<Finder['intent']>);
   const tm = /^(\d{1,2}):(\d{2})$/.exec(input.time || '') || ['', '8', '00'];
   const startParts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input.start || '');
@@ -43,6 +44,7 @@ export function createFinder(client: Client, input: { name: string; q: string; i
     start,
     repeat: (['daily', 'weekdays', 'weekly'] as const).includes(input.repeat as any) ? (input.repeat as Finder['repeat']) : 'daily',
     notify: !!input.notify,
+    icp_only: !!input.icp_only,
     enabled: true,
     created: Date.now(),
     last_run: 0,
@@ -121,7 +123,7 @@ export function describe(f: Finder, tz: string): string {
 
 /* ---- one run ---- */
 
-export interface RunResult { ok: boolean; text: string; pushed: { name: string; company: string; id: string; fit: string }[]; credits: number; spent: number; left: number; skipped: number; seen: string[]; limited?: boolean }
+export interface RunResult { ok: boolean; text: string; pushed: { name: string; company: string; id: string; fit: string }[]; credits: number; spent: number; left: number; skipped: number; seen: string[]; limited?: boolean; icp_skipped?: number }
 
 export async function runFinder(client: Client, f: Finder, live: boolean): Promise<RunResult> {
   const keys = effectiveKeys(client);
@@ -130,6 +132,9 @@ export async function runFinder(client: Client, f: Finder, live: boolean): Promi
   const intent = cleanIntent(f.intent);
   const filters = intentFilters(intent);
   const seen = new Set(f.seen || []);
+  const icpOnly = !!f.icp_only && targetingActive(client.targeting);
+  const icpOf = new Map<string, IcpMatch>();
+  let notIcp = 0;
   let want = Math.max(1, f.per_run);
   const left = creditsLeft(client);
   if (intent.kind === 'people' && live) {
@@ -146,21 +151,23 @@ export async function runFinder(client: Client, f: Finder, live: boolean): Promi
   const picked: (Person | Org)[] = [];
   let credits = 0;
   let skipped = 0;
-  for (let page = 1; page <= 4 && picked.length < want; page++) {
+  for (let page = 1; page <= (icpOnly ? 8 : 4) && picked.length < want; page++) {
     const res = intent.kind === 'people' ? (live ? await searchPeople(apollo, filters, page, 25) : samplePeople(filters, page, 25)) : (live ? await searchCompanies(apollo, filters, page, 25) : sampleCompanies(filters, page, 25));
     if (!res.rows.length) break;
     if (intent.kind === 'people') await annotateInLaunchpad(client, res.rows as Person[], live);
+    if (targetingActive(client.targeting)) await annotateTargeting(client, res.rows, intent.kind, apollo, live, icpOf);
     for (const r of res.rows) {
       if (picked.length >= want) break;
       if (seen.has(r.id)) continue;
       seen.add(r.id);
       if ((r as Person).in_lp) { skipped++; continue; }
+      if (icpOnly && icpOf.get(r.id)?.level !== 'icp') { notIcp++; continue; }
       picked.push(r);
     }
     if (res.rows.length < 25) break;
   }
   const seenOut = [...seen].slice(-2000);
-  if (!picked.length) return { ok: true, text: skipped ? `No new leads today: everything the search returned is already in Launchpad (${skipped} skipped).` : 'No new leads today: everything the search returned was delivered before.', pushed: [], credits: 0, spent: 0, left, skipped, seen: seenOut };
+  if (!picked.length) return { ok: true, icp_skipped: notIcp, text: notIcp ? `No ICP matches today: ${notIcp} lead${notIcp === 1 ? '' : 's'} checked, none met every targeting condition${skipped ? `, ${skipped} already in Launchpad` : ''}.` : skipped ? `No new leads today: everything the search returned is already in Launchpad (${skipped} skipped).` : 'No new leads today: everything the search returned was delivered before.', pushed: [], credits: 0, spent: 0, left, skipped, seen: seenOut };
   const fits = await fitLines(llm, client.profile, picked, intent, intent.kind, live && !!keys.openai);
   const header = `LEADS FINDER — ${f.name} (${new Intl.DateTimeFormat('en-US', { timeZone: client.launchpad.timezone, month: 'short', day: 'numeric', year: 'numeric' }).format(new Date())})`;
   const tags = ['leads-finder', 'leads-finder-new'];
@@ -169,7 +176,7 @@ export async function runFinder(client: Client, f: Finder, live: boolean): Promi
   let spent = 0;
   let waterfallNote = '';
   if (intent.kind === 'people') {
-    const r = await pushPeople(client, picked as Person[], {}, { live, apollo, tags, noteHeader: header, fits, waterfall: waterfallPlan(client, 'finder', `finder:${f.name}`) });
+    const r = await pushPeople(client, picked as Person[], {}, { live, apollo, llm, tags, noteHeader: header, fits, waterfall: waterfallPlan(client, 'finder', `finder:${f.name}`) });
     credits = r.credits;
     if (r.waterfall && r.waterfall.tried) waterfallNote = `, email waterfall found ${r.waterfall.found} of ${r.waterfall.tried}`;
     spent = r.spent;
@@ -181,13 +188,39 @@ export async function runFinder(client: Client, f: Finder, live: boolean): Promi
     errors.push(...r.errors);
     for (const c of r.results) pushed.push({ name: c.name, company: c.domain, id: c.id, fit: fits[c.name] || '' });
   }
-  if (!live) return { ok: true, text: `Sample run: ${picked.length} leads would be pushed (nothing written in sample mode).`, pushed: picked.map((r) => ({ name: 'first' in r ? `${r.first} ${r.last}`.trim() : r.name, company: 'first' in r ? r.company : r.domain, id: '', fit: fits[r.id] || '' })), credits: 0, spent: 0, left, skipped, seen: seenOut };
+  if (!live) return { ok: true, icp_skipped: notIcp, text: `Sample run: ${picked.length} leads would be pushed${notIcp ? `, ${notIcp} skipped as not an ICP match` : ''} (nothing written in sample mode).`, pushed: picked.map((r) => ({ name: 'first' in r ? `${r.first} ${r.last}`.trim() : r.name, company: 'first' in r ? r.company : r.domain, id: '', fit: fits[r.id] || '' })), credits: 0, spent: 0, left, skipped, seen: seenOut };
   const ok = errors.length === 0;
   const nowLeft = creditsLeft(client);
   const after = pushed.length ? autoPushSpend(client, pushed.length) : cap;
-  let text = ok ? `${pushed.length} new lead${pushed.length === 1 ? '' : 's'} pushed into Launchpad${skipped ? `, ${skipped} already there skipped` : ''}${waterfallNote}${spent ? `, ${spent} credit${spent === 1 ? '' : 's'} used (${nowLeft} left)` : ''}.` : errors.join(' ');
+  let text = ok ? `${pushed.length} new lead${pushed.length === 1 ? '' : 's'} pushed into Launchpad${skipped ? `, ${skipped} already there skipped` : ''}${notIcp ? `, ${notIcp} not an ICP match skipped` : ''}${waterfallNote}${spent ? `, ${spent} credit${spent === 1 ? '' : 's'} used (${nowLeft} left)` : ''}.` : errors.join(' ');
   if (ok && (capped || after.left <= 0)) text += ` ${after.used} of ${after.daily} automatic pushes used today${after.left <= 0 ? ': the finders pause until tomorrow' : ''}.`;
-  return { ok, text, pushed, credits, spent, left: nowLeft, skipped, seen: seenOut, limited: after.left <= 0 };
+  return { ok, text, pushed, credits, spent, left: nowLeft, skipped, seen: seenOut, limited: after.left <= 0, icp_skipped: notIcp };
+}
+
+/**
+ * The targeting verdict on each row. People get their company facts first
+ * (one org lookup per domain, cached a week, no credits) when the targeting
+ * has company conditions, so industry, size and revenue can be checked
+ * before a reveal. Sets `icp` on people; companies go into `into`.
+ */
+export async function annotateTargeting(client: Client, rows: (Person | Org)[], kind: Kind, apollo: ApolloCtx, live: boolean, into?: Map<string, IcpMatch>): Promise<Record<string, IcpMatch>> {
+  const t = client.targeting;
+  const out: Record<string, IcpMatch> = {};
+  if (!targetingActive(t)) return out;
+  if (kind === 'people') {
+    const people = rows as Person[];
+    const needOrg = !!(t.industries.length || t.employee_ranges.length || t.revenue_min || t.revenue_max || t.locations.length || t.exclude.industries.length || t.exclude.companies.length);
+    if (needOrg && live) {
+      try {
+        const orgs = await bulkOrgs(apollo, people.filter((p) => !p.org && p.domain).map((p) => p.domain));
+        for (const p of people) if (!p.org && p.domain && orgs[p.domain]) p.org = orgs[p.domain];
+      } catch { /* match on what we have */ }
+    }
+    for (const p of people) { const m = matchPerson(t, p); if (m) { p.icp = m; out[p.id] = m; into?.set(p.id, m); } }
+  } else {
+    for (const o of rows as Org[]) { const m = matchOrg(t, o); if (m) { out[o.id] = m; into?.set(o.id, m); } }
+  }
+  return out;
 }
 
 export async function runAndSave(client: Client, id: string, live: boolean, by: 'finder' | 'client' = 'finder'): Promise<RunResult> {

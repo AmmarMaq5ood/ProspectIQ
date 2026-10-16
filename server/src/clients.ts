@@ -6,6 +6,7 @@ import { clientDir, readJson, writeJson, ensureDir } from './store.js';
 import type { Client, Profile } from './types.js';
 import { creditsView, rollover } from './credits.js';
 import fs from 'node:fs';
+import { blankTargeting, cleanTargeting } from './icp.js';
 
 const INDEX = () => path.join(config.dataDir, 'clients.json');
 
@@ -85,6 +86,7 @@ function normalize(c: Client): Client {
   if (!c.auto_push || typeof c.auto_push.daily !== 'number') c.auto_push = { daily: 50, day: '', used: 0 };
   if (!c.keys) c.keys = { openai: '', openai_model: '', apollo: '', treg: '' };
   if (typeof c.keys.treg !== 'string') c.keys.treg = '';
+  c.targeting = cleanTargeting(c.targeting);
   delete raw.limits;
   return c;
 }
@@ -183,6 +185,7 @@ export function createClient(input: { slug: string; name: string; profile?: Part
     credits: { monthly: 1000, used: 0, period: '', extra: 0 },
     flags: { show_usage: false, show_activity: true, email_waterfall: false },
     auto_push: { daily: 50, day: '', used: 0 },
+    targeting: blankTargeting(),
     profile: { ...blankProfile(input.name.trim()), ...(input.profile || {}) },
   };
   return saveClient(client);
@@ -233,6 +236,7 @@ export function publicClient(client: Client) {
     slug: client.slug,
     name: client.name,
     profile: client.profile,
+    targeting: client.targeting,
     timezone: client.launchpad.timezone,
     launchpad_app: client.launchpad.app_url,
     location_id: client.launchpad.location_id,

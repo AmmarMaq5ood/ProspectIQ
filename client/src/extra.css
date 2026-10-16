@@ -281,3 +281,14 @@ html[data-admin-theme="dark"] .admin-app .ctrend-seg.waterfall, html[data-admin-
 .wf-list { min-height: 140px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
 .wf-tests td .t { font-weight: 500; }
 .wf-tests td .m { color: var(--muted); font-size: 12px; }
+
+/* Targeting: the verdict pills and the card accents */
+.pill.hot { color: #b54708; border-color: #fdb022; background: #fffaeb; }
+.pill.high { color: #175cd3; border-color: #84caff; background: #eff8ff; }
+.cards .lead.hot { border-color: #fdb022; box-shadow: inset 3px 0 0 #f79009; }
+.cards .lead.high { box-shadow: inset 3px 0 0 #84caff; }
+.rows tr.hot td:first-child { box-shadow: inset 3px 0 0 #f79009; }
+.rows tr.high td:first-child { box-shadow: inset 3px 0 0 #84caff; }
+html[data-admin-theme="dark"] .admin-app .pill.hot { color: #fec84b; border-color: #93370d; background: #2a1d08; }
+html[data-admin-theme="dark"] .admin-app .pill.high { color: #84caff; border-color: #1849a9; background: #0f1f3d; }
+.tgt .form-grid + .group, .tgt .group { margin-top: 14px; }

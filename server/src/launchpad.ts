@@ -1,4 +1,6 @@
 import type { Client, Org, Person, Profile, PushResult } from './types.js';
+import { PRIORITY } from './icp.js';
+import { cached } from './store.js';
 
 /**
  * Launchpad (white-labelled GoHighLevel) writes: company records, contacts
@@ -112,6 +114,8 @@ export async function pushContact(lp: LP, c: Person, companyName: string, bizId:
   const fields: { key: string; field_value: string }[] = [{ key: 'role', field_value: c.role || '' }, { key: 'title', field_value: c.title }];
   for (const [k, v] of Object.entries(extra)) if (v) fields.push({ key: k, field_value: v });
   if (c.linkedin) fields.push({ key: 'linkedin_url', field_value: c.linkedin });
+  if (c.icp) fields.push({ key: 'icp_match', field_value: PRIORITY[c.icp.level].field }, { key: 'lead_priority', field_value: PRIORITY[c.icp.level].priority });
+  if (c.summary) fields.push({ key: 'research_summary', field_value: c.summary.slice(0, 2000) });
   const body: Record<string, unknown> = { locationId: lp.locationId, firstName: c.first, lastName: c.last, companyName, source: 'ProspectIQ', tags: [...new Set(['bd', 'linkedin', 'research', ...(c.tags || [])])], customFields: fields };
   if (c.email) body.email = c.email;
   if (lp.owner) body.assignedTo = lp.owner;
@@ -216,7 +220,7 @@ export async function pushProspect(lp: LP, p: { company: { name: string; website
   for (const c of p.contacts) {
     const [id, isNew] = await pushContact(lp, c, p.company.name, biz, { industry: p.company.industry, company_size: p.company.size, follow_up_cadence: 'two weeks' });
     ids.push(id);
-    out.contacts.push({ name: `${c.first} ${c.last}`.trim(), role: c.role || '', id, new: isNew, email: c.email || '', email_source: c.email ? c.email_source || 'research' : undefined, email_verified: c.email_source === 'waterfall' ? !!c.email_verified : undefined });
+    out.contacts.push({ name: `${c.first} ${c.last}`.trim(), role: c.role || '', id, new: isNew, email: c.email || '', priority: c.icp ? PRIORITY[c.icp.level].priority : undefined, icp: c.icp?.level, email_source: c.email ? c.email_source || 'research' : undefined, email_verified: c.email_source === 'waterfall' ? !!c.email_verified : undefined });
     log.push(`Contact: ${c.first} ${c.last} (${c.role}) ${isNew ? 'created' : 'updated'}`);
   }
   if (ids[0]) {
@@ -227,4 +231,30 @@ export async function pushProspect(lp: LP, p: { company: { name: string; website
     if (await relate(lp, biz, opp)) log.push('Related the opportunity to the company record');
   }
   return out;
+}
+
+/* ---- the three lead fields the targeting fills, created once per sub-account ---- */
+
+const LEAD_FIELDS: { key: string; name: string; dataType: string; options?: string[]; placeholder?: string }[] = [
+  { key: 'icp_match', name: 'ICP Match', dataType: 'SINGLE_OPTIONS', options: ['ICP match', 'Target match', 'No match'] },
+  { key: 'lead_priority', name: 'Lead Priority', dataType: 'SINGLE_OPTIONS', options: ['Hot', 'High', 'Normal'] },
+  { key: 'research_summary', name: 'Research Summary', dataType: 'LARGE_TEXT', placeholder: 'Written by ProspectIQ when the lead was pushed' },
+];
+
+/** Makes sure ICP Match, Lead Priority and Research Summary exist on the sub-account's contacts. Checked once a day per client; returns the keys it had to create. */
+export async function ensureLeadFields(lp: LP, slug: string): Promise<string[]> {
+  return cached<string[]>(slug, `lead-fields|${lp.locationId}`, 86400, async () => {
+    const have = await req(lp, 'GET', `/locations/${encodeURIComponent(lp.locationId)}/customFields`);
+    const keys = new Set((have.customFields || []).map((f: any) => String(f.fieldKey || '').replace(/^contact\./, '')));
+    const made: string[] = [];
+    for (const f of LEAD_FIELDS) {
+      if (keys.has(f.key)) continue;
+      const body: Record<string, unknown> = { name: f.name, dataType: f.dataType, model: 'contact' };
+      if (f.options) body.options = f.options;
+      if (f.placeholder) body.placeholder = f.placeholder;
+      await req(lp, 'POST', `/locations/${encodeURIComponent(lp.locationId)}/customFields`, body);
+      made.push(f.key);
+    }
+    return made;
+  });
 }

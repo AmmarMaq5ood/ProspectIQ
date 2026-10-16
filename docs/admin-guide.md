@@ -36,6 +36,10 @@ Clients → **New client**, then work through the sections on the client page.
 - **Show Activity** and **Show Usage**: whether the client sees those tabs.
 - The ledger under the controls lists every allowance change, bonus and top-up with who did it.
 
+### Targeting
+
+The client's ideal customer profile, the same form they see on their own Targeting tab, so you can set it up for them or tidy what they entered. Leads that meet every condition are ICP matches (hot), at least half are target matches (high priority). Both are highlighted on the client's screens, tagged in Launchpad (`icp-match`, `hot-lead`, `target-match`, `high-priority`) and written to three contact fields that ProspectIQ creates in the sub-account on the first push: ICP Match, Lead Priority and Research Summary. The summary is two or three sentences per lead written against the targeting, also added to the research note. A switch sets whether new finders push only ICP matches; each finder can still be changed on the client's Daily finders tab or under Finders here.
+
 ### Keys & limits
 
 - **Research database key** and **AI key** per client, for clients who bring their own. Blank means the agency keys.

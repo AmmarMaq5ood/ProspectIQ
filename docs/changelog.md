@@ -2,6 +2,10 @@
 
 *Changes to ProspectIQ, newest first. One entry per shipped feature.*
 
+## 17 October 2026
+
+- **Targeting**: a client-facing ideal customer profile (titles, seniority, department, industries, locations, company size, revenue, exclusions), mirrored in admin. Matching leads are highlighted and sorted first on Scout and the filter tabs, with an "ICP matches" selection. Pushed contacts get the ICP Match, Lead Priority and Research Summary fields and the tags icp-match, hot-lead, target-match and high-priority; the summary also goes into the research note. Daily finders can push only ICP matches.
+
 ## 16 October 2026
 
 - **Docs split by audience**: clients see only the client guide, with no link out of Launchpad. The overview, admin guide and changelog open with the admin sign-in or the team docs link from Settings.

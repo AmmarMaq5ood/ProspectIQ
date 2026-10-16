@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { lpContactHref, nf, peopleAtHref } from '../api';
 import { useApp } from '../App';
-import type { CompaniesPushed, PeoplePushed, Person, SearchResult } from '../types';
+import type { CompaniesPushed, PeoplePushed, Person, SearchResult, IcpMatch } from '../types';
 import { Icon } from './Icon';
 import { Num } from './Motion';
 
@@ -124,7 +124,7 @@ export function PushedPeople({ data }: { data: PeoplePushed }) {
             ...r.contacts.map((c, j) => (
               <li key={`c${i}p${j}`}>
                 <div className="t"><LpLink href={c.id ? l.contacts[j] : ''}>{c.name}</LpLink></div>
-                <div className="m">{c.role}{c.new ? ' · created' : ' · updated'}{c.email ? <> · {c.email}{c.email_source === 'waterfall' && <span className={`pill ${c.email_verified ? 'good' : ''}`} style={{ marginLeft: 6 }}>{c.email_verified ? 'found by the email waterfall' : 'found by the email waterfall · unverified'}</span>}</> : ' · no work email on file'}</div>
+                <div className="m">{c.priority && c.priority !== 'Normal' && <span className={`pill ${c.priority === 'Hot' ? 'hot' : 'high'}`} style={{ marginRight: 6 }}>{c.priority === 'Hot' ? 'ICP match · hot lead' : 'target match · high priority'}</span>}{c.role}{c.new ? ' · created' : ' · updated'}{c.email ? <> · {c.email}{c.email_source === 'waterfall' && <span className={`pill ${c.email_verified ? 'good' : ''}`} style={{ marginLeft: 6 }}>{c.email_verified ? 'found by the email waterfall' : 'found by the email waterfall · unverified'}</span>}</> : ' · no work email on file'}</div>
               </li>
             )),
           ];
@@ -198,7 +198,7 @@ export function Criteria({ groups, edit }: { groups: CritGroup[]; edit?: ReactNo
 }
 
 /** The selection toolbar: real buttons, and the "hide already in Launchpad" switch on the right. */
-export function SelectBar({ onPick, email, newOnly, nLp, hide, onHide }: { onPick: (m: 'all' | 'none' | 'email' | 'new') => void; email?: boolean; newOnly?: boolean; nLp?: number; hide?: boolean; onHide?: (v: boolean) => void }) {
+export function SelectBar({ onPick, icp, email, newOnly, nLp, hide, onHide }: { onPick: (m: 'all' | 'none' | 'email' | 'new' | 'icp') => void; icp?: boolean; email?: boolean; newOnly?: boolean; nLp?: number; hide?: boolean; onHide?: (v: boolean) => void }) {
   return (
     <div className="selbar">
       <span className="lbl">Select</span>
@@ -207,6 +207,7 @@ export function SelectBar({ onPick, email, newOnly, nLp, hide, onHide }: { onPic
         <button type="button" onClick={() => onPick('none')}>None</button>
         {email && <button type="button" onClick={() => onPick('email')}>With an email</button>}
         {newOnly && <button type="button" onClick={() => onPick('new')}>New to Launchpad</button>}
+        {icp && <button type="button" onClick={() => onPick('icp')}>ICP matches</button>}
       </span>
       {onHide && typeof nLp === 'number' && <LpFilter n={nLp} hide={!!hide} onChange={onHide} />}
     </div>
@@ -261,4 +262,22 @@ export function PushCount({ n, people, nEmail, left, waterfall }: { n: number; p
       <span className="det">{people ? `Creates the company, the contacts with roles, a research note and the outreach deal.${waterfall ? ' The email waterfall looks for a work email where the research database has none.' : ''}` : 'Creates a company record for each.'}</span>
     </span>
   );
+}
+
+const listOf = (xs: string[]) => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+
+/** One line on a lead's targeting verdict: what matched, what did not, what is not known yet. */
+export function matchTextOf(m: IcpMatch): string {
+  if (m.excluded) return `Excluded by the targeting: ${m.excluded}.`;
+  const bits: string[] = [];
+  if (m.hits.length) bits.push(`Matches ${listOf(m.hits)}`);
+  if (m.misses.length) bits.push(`${listOf(m.misses)} ${m.misses.length === 1 ? 'differs' : 'differ'}`);
+  if (m.unknown.length) bits.push(`${listOf(m.unknown)} not known yet`);
+  return bits.length ? bits.join('; ') + '.' : '';
+}
+
+/** The targeting verdict on a lead: every condition met is an ICP match (hot lead); at least half is a target match (high priority). */
+export function IcpPill({ m }: { m?: IcpMatch | null }) {
+  if (!m || m.level === 'none') return null;
+  return <span className={`pill ${m.level === 'icp' ? 'hot' : 'high'}`} title={matchTextOf(m)}>{m.level === 'icp' ? 'ICP match · hot lead' : 'target match · high priority'}</span>;
 }

@@ -1,16 +1,22 @@
 import { enrichPerson, orgShape, type ApolloCtx } from './apollo.js';
-import { draftNote, lpOf, lpReady, pushCompany, pushProspect, roleFromTitle, sizeBucket } from './launchpad.js';
+import { draftNote, lpOf, lpReady, pushCompany, pushProspect, roleFromTitle, sizeBucket, ensureLeadFields } from './launchpad.js';
 import { sampleEnrich } from './samples.js';
 import { markPushed } from './lpindex.js';
 import { effectiveKeys } from './clients.js';
 import { creditsLeft } from './credits.js';
 import { waterfall, type TregCtx } from './treg.js';
 import type { Client, Org, Person, PushResult } from './types.js';
+import { PRIORITY, matchPerson, tagsFor, targetingActive } from './icp.js';
+import { leadSummaries } from './llm.js';
+import type { LlmCtx } from './llm.js';
 
 /** Push flows shared by the Scout tab, the People/Companies tabs and the finders. */
 
+/** Tags a person earned from the targeting; kept when a finder sets its own tags. */
+const KEEP_TAGS = new Set(['icp-match', 'hot-lead', 'target-match', 'high-priority']);
+
 export interface WaterfallPlan { ctx: TregCtx; budgetMs: number }
-export interface PushPeopleOpts { live: boolean; apollo: ApolloCtx; tags?: string[]; noteHeader?: string; fits?: Record<string, string>; waterfall?: WaterfallPlan }
+export interface PushPeopleOpts { live: boolean; apollo: ApolloCtx; llm?: LlmCtx; tags?: string[]; noteHeader?: string; fits?: Record<string, string>; waterfall?: WaterfallPlan }
 export interface WaterfallOutcome { tried: number; found: number }
 
 /** The email waterfall for this client, when it is switched on and a key is set: manual pushes get a short budget, finders a longer one. */
@@ -50,11 +56,17 @@ export async function pushPeople(client: Client, people: Person[], roles: Record
   }
   // 2. the email waterfall for those still without one
   const wf = opts.live ? await fillEmails(client, opts.waterfall, enriched) : undefined;
+  // 2b. the targeting: the verdict on the revealed facts, its tags, and a written summary per person
+  const tg = client.targeting;
+  if (targetingActive(tg)) for (const p of enriched) { p.icp = matchPerson(tg, p) || undefined; p.tags = [...new Set([...(p.tags || []), ...tagsFor(p.icp)])]; }
+  if (opts.live && lpReady(lpOf(client))) { try { await ensureLeadFields(lpOf(client), client.slug); } catch { /* the fields are a nicety; the push goes on */ } }
+  const summaries = await leadSummaries(opts.llm, client.profile, tg, enriched, opts.live && !!opts.llm?.key);
+  for (const p of enriched) if (summaries[p.id]) p.summary = summaries[p.id];
   // 3. credits, tags, grouping by company
   for (const p of enriched) {
     if (p.email) credits++;
     if (p.last_obf) p.last = '';
-    if (opts.tags) p.tags = [...new Set([...opts.tags, ...(p.tags || []).filter((t) => t.startsWith('email-'))])];
+    if (opts.tags) p.tags = [...new Set([...opts.tags, ...(p.tags || []).filter((t) => t.startsWith('email-') || KEEP_TAGS.has(t))])];
     const org = p.org && p.org.name ? p.org : orgShape({ name: p.company }, p.domain);
     if (!org.name) org.name = org.domain || 'Unknown company';
     const key = (org.domain || org.name).toLowerCase();
@@ -73,6 +85,8 @@ export async function pushPeople(client: Client, people: Person[], roles: Record
   let spent = 0;
   for (const g of groups.values()) {
     let [note, message] = draftNote(client.profile, g.org, g.contacts);
+    const sums = g.contacts.filter((c) => c.summary).map((c) => `- ${c.first} ${c.last} (${c.title})${c.icp && c.icp.level !== 'none' ? ` · ${PRIORITY[c.icp.level].label}, ${PRIORITY[c.icp.level].priority.toLowerCase()} priority` : ''}: ${c.summary}`);
+    if (sums.length) note = `LEAD SUMMARIES\n${sums.join('\n')}\n\n${note}`;
     if (opts.noteHeader) {
       const lines = [opts.noteHeader, ...g.contacts.map((c) => `- ${c.first} ${c.last} (${c.title}): ${opts.fits?.[c.id] || ''}`.trim())];
       note = lines.join('\n') + '\n\n' + note;

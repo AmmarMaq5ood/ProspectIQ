@@ -5,9 +5,9 @@ import { useApp } from '../App';
 import { useBusy } from '../components/Busy';
 import { FindersList } from '../components/FindersList';
 import { Icon } from '../components/Icon';
-import { CardHead, Criteria, EmptyState, Errors, Fold, Help, InLp, LpFilter, Notice, Pager, PerPage, PushCount, PushedCompanies, PushedPeople, ResultsHead, SelectBar, type CritGroup } from '../components/ui';
+import { CardHead, Criteria, EmptyState, Errors, Fold, Help, IcpPill, InLp, LpFilter, Notice, Pager, PerPage, PushCount, PushedCompanies, PushedPeople, ResultsHead, SelectBar, type CritGroup } from '../components/ui';
 import { roleFromTitle } from '../roles';
-import type { AskResult, CompaniesPushed, Kind, Org, PeoplePushed, Person, RecentSearch } from '../types';
+import type { AskResult, CompaniesPushed, Kind, Org, PeoplePushed, Person, RecentSearch, IcpMatch } from '../types';
 
 /** The Scout tab (was "Ask"; renamed so it is not mistaken for Launchpad's built-in Ask AI): plain words in, leads out; tick, push; save as a daily finder. */
 export default function Scout() {
@@ -82,17 +82,20 @@ export default function Scout() {
   const rephrase = () => { const el = inputRef.current; if (el) { el.focus(); el.select(); window.scrollTo({ top: 0, behavior: 'smooth' }); } };
 
   const allRows = res?.result.rows || [];
+  const icp = res?.icp || {};
+  const rank = (id: string) => (icp[id]?.level === 'icp' ? 2 : icp[id]?.level === 'target' ? 1 : 0);
+  const anyIcp = allRows.some((r) => rank(r.id) === 2);
   const kind: Kind = res?.kind || 'people';
   const isPeople = kind === 'people';
   const inLp = (r: Person | Org) => isPeople && !!(r as Person).in_lp;
   const nLp = allRows.filter(inLp).length;
-  const rows = hideLp ? allRows.filter((r) => !inLp(r)) : allRows;
+  const rows = (hideLp ? allRows.filter((r) => !inLp(r)) : allRows).slice().sort((a, b) => rank(b.id) - rank(a.id));
   const withEmail = (r: Person | Org) => isPeople && (!!(r as Person).has_email || !!(r as Person).email);
   const nSel = rows.filter((r) => picks.has(r.id)).length;
   const nEmail = rows.filter((r) => picks.has(r.id) && withEmail(r)).length;
   const left = c.credits.left;
   const blocked = isPeople && (left <= 0 || nEmail > left);
-  const pick = (mode: 'all' | 'none' | 'email' | 'new') => setPicks(new Set(rows.filter((r) => mode === 'all' || (mode === 'email' && withEmail(r)) || (mode === 'new' && !inLp(r))).map((r) => r.id)));
+  const pick = (mode: 'all' | 'none' | 'email' | 'new' | 'icp') => setPicks(new Set(rows.filter((r) => mode === 'all' || (mode === 'email' && withEmail(r)) || (mode === 'new' && !inLp(r)) || (mode === 'icp' && rank(r.id) === 2)).map((r) => r.id)));
   const toggle = (id: string, on: boolean) => setPicks((s) => { const n = new Set(s); if (on) n.add(id); else n.delete(id); return n; });
 
   const push = async () => {
@@ -120,13 +123,14 @@ export default function Scout() {
   const [fTime, setFTime] = useState('08:00');
   const [fRep, setFRep] = useState('daily');
   const [fNotify, setFNotify] = useState(true);
+  const [fIcp, setFIcp] = useState(!!c.targeting?.finders_icp_only);
   useEffect(() => { if (res) setFName(res.intent.summary); }, [res]);
   const saveFinder = async (e: FormEvent) => {
     e.preventDefault();
     if (!res) return;
     setErr('');
     try {
-      await busy.run('Saving the finder…', () => api('/finders', { body: { name: fName, q, intent: res.intent, per_run: fPer, start: fStart, time: fTime, repeat: fRep, notify: fNotify } }));
+      await busy.run('Saving the finder…', () => api('/finders', { body: { name: fName, q, intent: res.intent, per_run: fPer, start: fStart, time: fTime, repeat: fRep, notify: fNotify, icp_only: fIcp } }));
       setNotice([`Finder saved: "${fName || res.intent.summary}". It runs on its own from ${fStart} at ${fTime} (${c.timezone}).`]);
       setFKey((k) => k + 1);
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -232,12 +236,12 @@ export default function Scout() {
             <Criteria groups={groups} />
             {rows.length ? (
               <>
-                <SelectBar onPick={pick} email={isPeople} newOnly={isPeople && nLp > 0} nLp={nLp} hide={hideLp} onHide={setHideLp} />
+                <SelectBar onPick={pick} icp={anyIcp} email={isPeople} newOnly={isPeople && nLp > 0} nLp={nLp} hide={hideLp} onHide={setHideLp} />
                 <div className="cards">
                   {rows.map((r) => (
-                    <label className={`lead${inLp(r) ? ' dim' : ''}`} key={r.id}>
+                    <label className={`lead${inLp(r) ? ' dim' : ''}${rank(r.id) === 2 ? ' hot' : rank(r.id) === 1 ? ' high' : ''}`} key={r.id}>
                       <input type="checkbox" checked={picks.has(r.id)} onChange={(e) => toggle(r.id, e.target.checked)} />
-                      {isPeople ? <PersonCard p={r as Person} roles={c.profile.roles} role={roles[r.id]} onRole={(v) => setRoles((m) => ({ ...m, [r.id]: v }))} fit={res.fits[r.id] || ''} /> : <OrgCard o={r as Org} fit={res.fits[r.id] || ''} onPeople={() => nav(peopleAtHref((r as Org).domain))} />}
+                      {isPeople ? <PersonCard p={r as Person} roles={c.profile.roles} role={roles[r.id]} onRole={(v) => setRoles((m) => ({ ...m, [r.id]: v }))} fit={res.fits[r.id] || ''} m={icp[r.id]} /> : <OrgCard o={r as Org} fit={res.fits[r.id] || ''} m={icp[r.id]} onPeople={() => nav(peopleAtHref((r as Org).domain))} />}
                     </label>
                   ))}
                 </div>
@@ -275,6 +279,7 @@ export default function Scout() {
                   <div><label className="f" htmlFor="frep">Repeat</label><select className="in" id="frep" value={fRep} onChange={(e) => setFRep(e.target.value)}><option value="daily">Every day</option><option value="weekdays">Weekdays only</option><option value="weekly">Once a week (on the start day)</option></select></div>
                 </div>
                 <div className="full checks one"><label><input type="checkbox" checked={fNotify} onChange={(e) => setFNotify(e.target.checked)} /> Notify by SMS, WhatsApp or email when new leads land (Launchpad workflow on the tag <code>leads-finder-new</code>)</label></div>
+                <div className="full checks one"><label><input type="checkbox" checked={fIcp} onChange={(e) => setFIcp(e.target.checked)} /> Only push <b>ICP matches</b>, leads that meet every condition on the Targeting tab; the rest are skipped</label></div>
                 <div className="full actions"><button className="btn" type="submit"><Icon name="calendar" />Save as a daily finder</button><span className="hint">{isPeople ? `Spends up to ${fPer} lookup credit${fPer === 1 ? '' : 's'} per run. ` : 'Company records only; no lookup credits. '}All finders together add up to {c.auto_push?.daily ?? 50} leads a day, and up to {c.auto_push?.max_finders ?? 2} can run at a time. Times are {c.timezone}.</span></div>
               </form>
             </Fold>
@@ -297,7 +302,7 @@ export default function Scout() {
   );
 }
 
-function PersonCard({ p, roles, role, onRole, fit }: { p: Person; roles: string[]; role?: string; onRole: (v: string) => void; fit: string }) {
+function PersonCard({ p, roles, role, onRole, fit, m }: { p: Person; roles: string[]; role?: string; onRole: (v: string) => void; fit: string; m?: IcpMatch }) {
   const name = fullName(p);
   return (
     <>
@@ -306,6 +311,7 @@ function PersonCard({ p, roles, role, onRole, fit }: { p: Person; roles: string[
         <div className="nm">{name} <span className="st">· {p.title}</span></div>
         <div className="st">{p.company}{p.domain && ` · ${p.domain}`}{p.city && ` · ${p.city}`}</div>
         <div className="pills">
+          <IcpPill m={m} />
           <InLp p={p} />
           {(p.has_email || p.email) && <span className="pill good">email</span>}
           {p.has_phone && <span className="pill">phone</span>}
@@ -320,7 +326,7 @@ function PersonCard({ p, roles, role, onRole, fit }: { p: Person; roles: string[
   );
 }
 
-function OrgCard({ o, fit, onPeople }: { o: Org; fit: string; onPeople: () => void }) {
+function OrgCard({ o, fit, onPeople, m }: { o: Org; fit: string; onPeople: () => void; m?: IcpMatch }) {
   const bits = [o.industry ? cap(o.industry) : '', o.employees ? `${nf(o.employees)} employees` : '', hq(o), o.revenue ? `$${o.revenue}` : ''].filter(Boolean);
   return (
     <>
@@ -329,6 +335,7 @@ function OrgCard({ o, fit, onPeople }: { o: Org; fit: string; onPeople: () => vo
         <div className="nm">{o.name}</div>
         <div className="st">{bits.join(' · ')}</div>
         <div className="pills">
+          <IcpPill m={m} />
           {o.website && <a className="pill" href={o.website} target="_blank" rel="noopener" onClick={(e) => e.stopPropagation()}>web</a>}
           {o.linkedin && <a className="pill" href={o.linkedin} target="_blank" rel="noopener" onClick={(e) => e.stopPropagation()}>LinkedIn</a>}
           <a className="pill blue" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onPeople(); }}>people here</a>

@@ -140,7 +140,7 @@ export default function Lookup() {
               <p className="sub">Tick who goes into Launchpad. The first ticked contact gets the note and the outreach deal. Surnames are masked until the push, which fills in the full name, LinkedIn and the work email where one exists. Roles are guessed from the title; change any.</p>
               {r.people.length ? (
                 <>
-                  <SelectBar onPick={(m) => pick(m === 'new' ? 'all' : m)} email />
+                  <SelectBar onPick={(m) => pick(m === 'email' ? 'email' : m === 'none' ? 'none' : 'all')} email />
                   <div className="scroll">
                     <table className="rows people">
                       <thead><tr><th scope="col"></th><th scope="col">Name</th><th scope="col">Title</th><th scope="col">Role</th><th scope="col">Email on file</th><th scope="col">LinkedIn</th></tr></thead>

@@ -3,7 +3,8 @@ import { DEP_CODES, EMPLOYEE_RANGES, SENIORITY } from './apollo.js';
 import { cached } from './store.js';
 import { usageLog, priceFor } from './usage.js';
 import { blankIntent, cleanIntent, intentSummary, rulesIntent } from './rules.js';
-import type { Intent, Kind, Org, Person, Profile } from './types.js';
+import type { Intent, Kind, Org, Person, Profile, Targeting } from './types.js';
+import { PRIORITY, matchText, summaryRule, targetingActive } from './icp.js';
 
 /**
  * GPT for ProspectIQ: reads a plain-words request into search filters, writes
@@ -179,5 +180,36 @@ export async function siteText(url: string): Promise<string> {
     }
   }
   if (out.length < 200) throw new Error('Could not read enough text from that website.');
+  return out;
+}
+
+/* ---- lead summaries, written against the client's targeting at push time ---- */
+
+/**
+ * Two or three sentences per person for the rep: who they are and what the
+ * company does, why they fit (or not) the ideal customer profile, and how
+ * hot. Rule-written first; GPT rewrites when a key is set, from the same
+ * facts and never beyond them. Saved on the contact and in the note.
+ */
+export async function leadSummaries(c: LlmCtx | undefined, profile: Profile, t: Targeting, people: Person[], useGpt: boolean): Promise<Record<string, string>> {
+  const out: Record<string, string> = {};
+  for (const p of people) out[p.id] = summaryRule(p, p.icp || null, t, profile);
+  if (!useGpt || !c || !c.key || !people.length) return out;
+  const facts = people.map((p) => ({
+    id: p.id, name: `${p.first} ${p.last}`.trim(), title: p.title, company: p.company || p.org?.name || '', industry: p.org?.industry || '', employees: p.org?.employees || 0, revenue: p.org?.revenue || '',
+    location: [p.city, p.org?.state, p.org?.country].filter(Boolean).join(', '), about: (p.org?.description || '').slice(0, 240),
+    match: p.icp ? { level: PRIORITY[p.icp.level].label || 'no match', priority: PRIORITY[p.icp.level].priority, detail: matchText(p.icp) } : null,
+  }));
+  const schema = { type: 'object', properties: { summaries: { type: 'array', items: { type: 'object', properties: { id: { type: 'string' }, summary: { type: 'string' } }, required: ['id', 'summary'], additionalProperties: false } } }, required: ['summaries'], additionalProperties: false };
+  const icp = targetingActive(t)
+    ? `The client's ideal customer profile: titles ${t.titles.join(', ') || 'any'}; industries ${t.industries.join(', ') || 'any'}; locations ${t.locations.join(', ') || 'any'}; company sizes ${t.employee_ranges.map((r) => r.replace(',', ' to ') + ' employees').join(', ') || 'any'}; revenue ${t.revenue_min || t.revenue_max ? `${t.revenue_min || 0} to ${t.revenue_max || 'any'} USD` : 'any'}.`
+    : 'The client has not set an ideal customer profile.';
+  const system = `You write a short research summary (2 or 3 sentences, at most 60 words) for each lead, for a sales rep who will call or email them. ${profileContext(profile)} ${icp} Sentence 1: who the person is and what their company does, from the facts (title, company, industry, size, location). Sentence 2: why they are or are not a fit, naming the matched conditions from match.detail. When match.priority is Hot or High, say so and why in plain words. Use only the facts given; never invent people, numbers or products. No exclamation marks, no greetings, no bullet points.`;
+  try {
+    const j = await cached<{ summaries: { id: string; summary: string }[] }>(c.slug, `sum|${c.model}|${JSON.stringify(facts)}`, 86400, () => json(c, 'summaries', system, `Leads (JSON):\n${JSON.stringify(facts)}`, 'summaries', schema));
+    for (const s of j.summaries || []) if (out[s.id] !== undefined && s.summary?.trim()) out[s.id] = s.summary.trim().slice(0, 600);
+  } catch {
+    // the rule-written summaries stay
+  }
   return out;
 }

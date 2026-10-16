@@ -69,6 +69,8 @@ export interface Person {
   role?: string;
   /** Set when this person is already a Launchpad contact. */
   in_lp?: { id: string; name: string };
+  icp?: IcpMatch;
+  summary?: string;
 }
 
 export interface Org {
@@ -117,6 +119,23 @@ export interface Profile {
   default_titles: string[];
 }
 
+/** The ideal customer profile. Empty lists mean "any". */
+export interface Targeting {
+  titles: string[];
+  seniorities: string[];
+  departments: string[];
+  industries: string[];
+  locations: string[];
+  employee_ranges: string[];
+  revenue_min: number;
+  revenue_max: number;
+  exclude: { titles: string[]; industries: string[]; locations: string[]; companies: string[] };
+  finders_icp_only: boolean;
+  updated: number;
+}
+export type MatchLevel = 'icp' | 'target' | 'none';
+export interface IcpMatch { level: MatchLevel; hits: string[]; misses: string[]; unknown: string[]; of: number; excluded?: string; why: string[] }
+
 export interface PublicClient {
   slug: string;
   name: string;
@@ -135,6 +154,7 @@ export interface PublicClient {
   email_waterfall: boolean;
   support_email: string;
   auto_push: AutoPush;
+  targeting: Targeting;
 }
 
 /** The daily cap on what the finders push: used / left today, in the client's timezone. */
@@ -162,6 +182,7 @@ export interface FinderView {
   start: number;
   repeat: 'daily' | 'weekdays' | 'weekly';
   notify: boolean;
+  icp_only?: boolean;
   enabled: boolean;
   created: number;
   last_run: number;
@@ -180,13 +201,14 @@ export interface AskResult {
   kind: Kind;
   result: SearchResult<Person | Org>;
   fits: Record<string, string>;
+  icp?: Record<string, IcpMatch>;
   warnings: string[];
   sample: boolean;
 }
 
 export interface PushResult {
   company: { name: string; id: string };
-  contacts: { name: string; role: string; id: string; new: boolean; email: string; email_source?: 'research' | 'waterfall'; email_verified?: boolean }[];
+  contacts: { name: string; role: string; id: string; new: boolean; email: string; email_source?: 'research' | 'waterfall'; email_verified?: boolean; priority?: string; icp?: string }[];
   note_added: boolean;
   opportunity: { id: string; name: string; created: boolean };
   log: string[];
@@ -260,6 +282,7 @@ export interface Client {
   flags: { show_usage: boolean; show_activity: boolean; email_waterfall: boolean };
   auto_push: { daily: number; day: string; used: number; max_finders?: number };
   profile: Profile;
+  targeting: Targeting;
 }
 
 export interface ClientRow { slug: string; name: string; enabled: boolean; created: number; connected: boolean; has_openai: boolean; has_apollo: boolean; finders: number }

@@ -20,7 +20,8 @@ It is not for consumer businesses. The research database holds business contacts
 | **Scout** | Type a request such as "purchasing managers at valve makers in Texas with 100 to 1,000 employees". ProspectIQ reads it, shows how it was understood, lists the matches with a one-line reason each fits, and pushes the ticked ones to Launchpad. Any search can become a daily finder. |
 | **People, Companies, Industries** | The same research with every filter laid out: titles, seniority, department, locations, company size, revenue, funding, technologies, email status. Industries adds a size and headquarters breakdown and a one-click "find buyers at these companies". |
 | **Company lookup** | One website address in; the company, its buyers, a drafted research note and a connection message out. |
-| **Daily finders** | Saved searches that run on their own schedule and push only new leads, with a notification through Launchpad. |
+| **Daily finders** | Saved searches that run on their own schedule and push only new leads, with a notification through Launchpad. A finder can be told to push only ICP matches. |
+| **Targeting** | The client's ideal customer profile: titles, industries, locations, size, revenue, exclusions. Matching leads are highlighted and sorted first, tagged in Launchpad and given a lead priority. |
 | **Activity** | Every push, finder run, search and credit change, newest first. |
 | **Usage** | Searches, lookups and credits by day and by feature. |
 
@@ -35,7 +36,7 @@ It is not for consumer businesses. The research database holds business contacts
 For each ticked lead:
 
 - A **company record**, with website, location, industry and size.
-- A **contact** with full name, title, work email where one was found, LinkedIn URL, and the fields Role, Industry and Company Size. Contacts are tagged `research`; finder leads also get `leads-finder` and `leads-finder-new`.
+- A **contact** with full name, title, work email where one was found, LinkedIn URL, and the fields Role, Industry, Company Size, ICP Match, Lead Priority and Research Summary. Contacts are tagged `research`; finder leads also get `leads-finder` and `leads-finder-new`; leads that fit the client's targeting get `icp-match` and `hot-lead` (every condition met) or `target-match` and `high-priority` (at least half).
 - A **research note** on the first contact at each company: why these people fit, a short company brief and a suggested connection message, written from the client's profile.
 - An **outreach deal** at the first stage of the client's chosen pipeline, one per company.
 
