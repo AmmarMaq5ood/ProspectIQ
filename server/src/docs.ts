@@ -55,7 +55,7 @@ export function fillPlaceholders(md: string, values: Record<string, string>): st
 }
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-const slugify = (s: string) => s.replace(/<[^>]+>/g, '').toLowerCase().replace(/&[a-z]+;|[^a-z0-9\s-]/g, '').trim().replace(/\s+/g, '-');
+const slugify = (s: string) => s.replace(/<[^>]+>/g, '').toLowerCase().replace(/&#?[a-z0-9]+;|[^a-z0-9\s-]/g, '').trim().replace(/\s+/g, '-');
 
 export interface RenderedDoc { page: DocPage; title: string; body: string; toc: { id: string; text: string }[]; html: string }
 
@@ -99,7 +99,8 @@ export function notFoundPage(): string {
 
 function layout(page: DocPage, body: string, toc: { id: string; text: string }[], v: Record<string, string>): string {
   const nav = DOC_PAGES.map((p) => `<a class="${p.slug === page.slug ? 'on' : ''}" href="${v.base}/docs/${p.slug}"><strong>${esc(p.title)}</strong><span>${esc(p.blurb)}</span></a>`).join('');
-  const onPage = toc.length ? `<div class="toc"><h4>On this page</h4>${toc.map((t) => `<a href="#${t.id}">${esc(t.text)}</a>`).join('')}</div>` : '';
+  // toc text comes out of marked already escaped, so it is used as is
+  const onPage = toc.length ? `<div class="toc"><h4>On this page</h4>${toc.map((t) => `<a href="#${t.id}">${t.text}</a>`).join('')}</div>` : '';
   return `<!doctype html>
 <html lang="en">
 <head>
