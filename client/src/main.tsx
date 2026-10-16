@@ -5,6 +5,7 @@ import App from './App';
 import './styles.css';
 import './extra.css';
 import './polish.css';
+import './theme.css';
 import { BASE } from './api';
 
 createRoot(document.getElementById('root')!).render(

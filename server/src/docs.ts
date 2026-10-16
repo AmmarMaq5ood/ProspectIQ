@@ -113,13 +113,16 @@ function layout(page: DocPage, body: string, toc: { id: string; text: string }[]
 <meta name="robots" content="noindex">
 <link rel="icon" type="image/svg+xml" href="${v.base}/favicon.svg">
 <link rel="apple-touch-icon" href="${v.base}/apple-touch-icon.png">
-<meta name="theme-color" content="#155eef">
+<meta name="theme-color" content="#6a5ae0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
 <title>${esc(page.title)} · ProspectIQ</title>
 <style>
-:root { color-scheme: light; --bg: #ffffff; --page: #f3f4f6; --surface: #ffffff; --border: #e5e7eb; --border-2: #d1d5db; --text: #111827; --text-2: #374151; --muted: #6b7280; --primary: #155eef; --primary-soft: #eff4ff; --primary-line: #b2ccff; --accent: #f26a2a; --code: #f3f4f6; }
-@media (prefers-color-scheme: dark) { :root { color-scheme: dark; --bg: #0b1220; --page: #0b1220; --surface: #111a2b; --border: #243049; --border-2: #324060; --text: #e5e7eb; --text-2: #cbd5e1; --muted: #94a3b8; --primary: #6ea0ff; --primary-soft: #16233d; --primary-line: #2f4a7a; --code: #16213a; } }
+:root { color-scheme: light; --bg: #ffffff; --page: #f3f1fb; --surface: #ffffff; --border: #ebe8f6; --border-2: #dcd8ee; --text: #16142b; --text-2: #3d3a57; --muted: #7b7894; --primary: #6a5ae0; --primary-soft: #efecff; --primary-line: #d3ccff; --accent: #6a5ae0; --code: #f3f1fb; }
+@media (prefers-color-scheme: dark) { :root { color-scheme: dark; --bg: #15132a; --page: #15132a; --surface: #1d1b36; --border: #2f2c52; --border-2: #3d3966; --text: #ecebfa; --text-2: #cfcde6; --muted: #8f8cae; --primary: #978aff; --primary-soft: #272352; --primary-line: #463f8a; --code: #242143; } }
 * { box-sizing: border-box; }
-html, body { margin: 0; background: var(--page); color: var(--text); font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, Helvetica, Arial, sans-serif; }
+html, body { margin: 0; background: var(--page); color: var(--text); font: 15px/1.6 "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, Helvetica, Arial, sans-serif; }
 a { color: var(--primary); text-decoration: none; }
 a:hover { text-decoration: underline; }
 .wrap { display: grid; grid-template-columns: 280px minmax(0, 1fr); min-height: 100vh; }
