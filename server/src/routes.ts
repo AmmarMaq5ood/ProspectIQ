@@ -348,15 +348,23 @@ function filtersSummary(f: ReturnType<typeof cleanFilters>, kind: string): strin
 
 /* ---- usage ---- */
 
+/** The same window one period earlier, for the "vs the period before" chips. */
+function previousTotals(slug: string, days: number, tz: string) {
+  const now = Date.now();
+  const rows = usageReadSince(slug, now - 2 * days * 86400000).filter((r) => r.t < now - days * 86400000);
+  return usageCompute(rows, days, tz).totals;
+}
+
 api.get('/usage', requireClient('usage'), wrap(async (req, res) => {
   const { client, live, apollo, sample } = req.piq!;
   const admin = isAdmin(req);
   if (!admin && !client.flags.show_usage) return res.status(403).json({ error: 'Usage is not switched on for this account.' });
   const days = [7, 30, 90].includes(Number(req.query.days)) ? Number(req.query.days) : 30;
   const summary = usageCompute(usageRead(client.slug, days), days, client.launchpad.timezone);
+  const prev = previousTotals(client.slug, days, client.launchpad.timezone);
   let plan: unknown[] = [];
   if (admin && live && !sample) { try { plan = await planLimits(apollo); } catch { plan = []; } }
-  res.json({ summary: admin ? summary : stripCost(summary), plan, show_cost: admin, credits: creditsView(client), ledger: creditLedger(client.slug, 30) });
+  res.json({ summary: admin ? summary : stripCost(summary), prev: admin ? prev : { ...prev, cost: 0 }, plan, show_cost: admin, credits: creditsView(client), ledger: creditLedger(client.slug, 30) });
 }));
 
 /** What a client may see: counts and tokens, never money. */
@@ -603,7 +611,7 @@ admin.get('/clients/:slug/usage', (req, res) => {
   const c = getClient(String(req.params.slug));
   if (!c) return res.status(404).json({ error: 'No such client.' });
   const days = [7, 30, 90].includes(Number(req.query.days)) ? Number(req.query.days) : 30;
-  res.json({ summary: usageCompute(usageRead(c.slug, days), days, c.launchpad.timezone) });
+  res.json({ summary: usageCompute(usageRead(c.slug, days), days, c.launchpad.timezone), prev: previousTotals(c.slug, days, c.launchpad.timezone) });
 });
 
 api.use('/admin', admin);

@@ -5,6 +5,7 @@ import { Icon } from '../components/Icon';
 import { Num } from '../components/Motion';
 import { Errors, Help, Notice } from '../components/ui';
 import type { WaterfallReport, WaterfallSearchTest, WaterfallTestRow } from '../types';
+import { DotColumns } from '../components/Charts';
 
 /**
  * The email waterfall, for the agency: how it has done (every lookup the app
@@ -108,7 +109,7 @@ export default function AdminWaterfall() {
         )}
       </section>
 
-      <section className="grid two" aria-label="By source and by client">
+      <section className="grid one" aria-label="By source and by client">
         <div className="card">
           <h2>By source</h2>
           <p className="sub">Where the lookups came from.</p>
@@ -123,7 +124,8 @@ export default function AdminWaterfall() {
 
       <section className="card" aria-label="By day">
         <h2>By day</h2>
-        <Lines rows={d.by_day.map((x) => ({ label: x.day, ...x }))} empty="No lookups in this period." />
+        <p className="sub">Each column is a day: filled dots are emails found, hollow dots lookups that found nothing.</p>
+        <DotColumns title="Lookups by day, found against tried" color="mint" data={[...d.by_day].reverse().map((x) => ({ label: dayLabel(x.day), value: x.tried, filled: x.found, sub: `${nf(x.verified)} verified` }))} empty="No lookups in this period." />
       </section>
 
       <section className="card" aria-label="Test history">
@@ -152,6 +154,9 @@ export default function AdminWaterfall() {
     </>
   );
 }
+
+/** "2026-09-22" as "Sep 22", the same form the Usage page uses. */
+const dayLabel = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 
 function Lines({ rows, empty = 'Nothing yet.' }: { rows: ({ label: string } & { tried: number; found: number; verified: number; errors: number; cost: number; ms: number })[]; empty?: string }) {
   if (!rows.length) return <p className="empty">{empty}</p>;

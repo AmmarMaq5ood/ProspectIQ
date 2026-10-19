@@ -2,6 +2,10 @@
 
 *Changes to ProspectIQ, newest first. One entry per shipped feature.*
 
+## 19 October 2026
+
+- **Second UI pass**: the filter tabs show their active conditions above the results, people rows get avatars and companies a mark, the company lookup lays the company out as facts, Targeting is two panels with folds and a sticky save bar, and every accordion opens and closes with motion. Usage and the admin dashboards draw dotted day columns, thin stacked month bars with a legend, delta chips against the period before, and a used-against-left credits bar. Company rows link out with website, LinkedIn and phone icons, and the admin cost and waterfall breakdowns sit in full-width tables.
+
 ## 17 October 2026
 
 - **Targeting**: a client-facing ideal customer profile (titles, seniority, department, industries, locations, company size, revenue, exclusions), mirrored in admin. Matching leads are highlighted and sorted first on Scout and the filter tabs, with an "ICP matches" selection. Pushed contacts get the ICP Match, Lead Priority and Research Summary fields and the tags icp-match, hot-lead, target-match and high-priority; the summary also goes into the research note. Daily finders can push only ICP matches.

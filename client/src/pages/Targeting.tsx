@@ -34,8 +34,8 @@ export default function TargetingPage() {
       <section className="card">
         <CardHead icon="filter" title="Targeting" sub="Who you most want to reach. Scout still shows everything a request asks for; leads that fit this get highlighted first, land in Launchpad with the tags icp-match, hot-lead, target-match and high-priority, and daily finders can be told to push only the ICP matches." />
         <TargetingForm value={t} onChange={setT} options={options} profile={c.profile} />
-        <div className="savebar">
-          <span className="hint">{dirty ? 'Unsaved changes.' : c.targeting.updated ? `Last saved ${new Date(c.targeting.updated).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}.` : ''}</span>
+        <div className="pushbar tgt-save">
+          <span className="cnt"><b>{dirty ? 'Unsaved changes' : 'Saved'}</b><span className="det">{dirty ? 'Save to start matching new searches against this.' : c.targeting.updated ? `Last saved ${new Date(c.targeting.updated).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}.` : 'Nothing saved yet.'}</span></span>
           <button className="btn" type="button" onClick={save} disabled={!dirty || busy.active}><Icon name="check" />Save targeting</button>
         </div>
       </section>

@@ -5,6 +5,7 @@ import { Icon } from '../components/Icon';
 import { Num } from '../components/Motion';
 import { Errors, Pager, PerPage } from '../components/ui';
 import type { AdminActivityPage, Overview } from '../types';
+import { Progress } from '../components/Charts';
 
 const KINDS: [string, string][] = [['', 'Everything'], ['finder', 'Finder runs'], ['push', 'Pushes'], ['search', 'Searches'], ['lookup', 'Lookups'], ['credits', 'Credits']];
 const ICON: Record<string, string> = { finder: 'calendar', push: 'push', search: 'search', lookup: 'link', credits: 'chart', system: 'settings' };
@@ -39,6 +40,12 @@ export default function AdminOverview() {
         <div className="kpi"><div className="l">Credits left</div><div className="v"><Num value={t.credits_left} /></div><div className="n">{t.clients_out ? <span className="od">{t.clients_out} client{t.clients_out === 1 ? '' : 's'} at zero</span> : 'nobody at zero'}</div></div>
         <div className="kpi"><div className="l">Finder runs today</div><div className="v"><Num value={t.finder_runs_today} /></div><div className="n">{nf(t.finders)} finders scheduled</div></div>
         <div className="kpi"><div className="l">Searches this month</div><div className="v"><Num value={t.searches_month} /></div><div className="n">free</div></div>
+      </section>
+
+      <section className="card" aria-label="Credits across clients">
+        <h2>Credits this month</h2>
+        <p className="sub">Used against left, every client together. Credits reset on the 1st in each client's timezone.</p>
+        <Progress a={t.credits_used} b={t.credits_left} aLabel="used this month" bLabel={`left of ${nf(t.credits_total)}`} color="mint" />
       </section>
 
       <section className="grid two" aria-label="Clients and activity">

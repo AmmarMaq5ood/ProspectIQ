@@ -1,14 +1,15 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { api, cap, errText, fullName, hq, money, nf, outOfCredits, peopleAtHref } from '../api';
+import { api, cap, errText, fullName, hq, money, nf, outOfCredits, peopleAtHref, hue, initials } from '../api';
 import { useApp } from '../App';
 import { useBusy } from '../components/Busy';
 import { Chips } from '../components/Chips';
 import { Icon } from '../components/Icon';
-import { CardHead, Checks, Errors, Field, Group, Help, IcpPill, InLp, Pager, PerPage, PushCount, PushedCompanies, PushedPeople, Range, ResultsHead, SelectBar } from '../components/ui';
+import { CardHead, Checks, Errors, Field, Group, Help, IcpPill, InLp, Pager, PerPage, PushCount, PushedCompanies, PushedPeople, Range, ResultsHead, SelectBar, Criteria } from '../components/ui';
 import { roleFromTitle } from '../roles';
 import { filtersToQuery } from './Scout';
 import type { CompaniesPushed, Filters, Org, PeoplePushed, Person, SearchResult, IcpMatch } from '../types';
+import type { CritGroup } from '../components/ui';
 
 type Mode = 'people' | 'companies' | 'industries';
 
@@ -44,6 +45,26 @@ export default function Research({ mode }: { mode: Mode }) {
   const people = mode === 'people';
   const kind = people ? 'people' : 'companies';
   const filters = decode(params);
+  /* the active filters, grouped and colour-coded like Scout's "Understood as" row */
+  const depLabel = (code: string) => { for (const g of Object.values(options.departments)) if (g[code]) return g[code]; return code; };
+  const critGroups: CritGroup[] = [
+    { label: 'Titles', facet: 'title', values: filters.titles },
+    { label: 'Not titles', facet: 'not', values: filters.not_titles },
+    { label: 'Seniority', facet: 'people', values: filters.sen.map((x) => options.seniority[x] || x) },
+    { label: 'Department', facet: 'people', values: filters.dep.map(depLabel) },
+    { label: 'Located in', facet: 'place', values: filters.ploc },
+    { label: 'Not in', facet: 'not', values: filters.pnot },
+    { label: 'Company', facet: 'industry', values: [...(filters.oname ? [filters.oname] : []), ...filters.domains, ...filters.okw] },
+    { label: 'Headquarters', facet: 'place', values: filters.oloc },
+    { label: 'HQ not in', facet: 'not', values: filters.onot },
+    { label: 'Company size', facet: 'size', values: filters.size.map((x) => options.employee_ranges[x] || x) },
+    { label: 'Revenue', facet: 'size', values: filters.rev_min || filters.rev_max ? [`${filters.rev_min ? money(Number(filters.rev_min)) : '$0'} to ${filters.rev_max ? money(Number(filters.rev_max)) : 'any'}`] : [] },
+    { label: 'Funding', facet: 'other', values: filters.fund.map((x) => options.funding[x] || x) },
+    { label: 'Founded', facet: 'other', values: filters.founded_min || filters.founded_max ? [`${filters.founded_min || 'any'} to ${filters.founded_max || 'any'}`] : [] },
+    { label: 'Uses', facet: 'tech', values: filters.tech },
+    { label: 'Email', facet: 'other', values: filters.email.map((x) => options.email_status[x] || x) },
+    { label: 'Keywords', facet: 'other', values: [...(filters.kw ? [filters.kw] : []), ...(filters.name ? [filters.name] : [])] },
+  ];
   const active = [...params.keys()].some((k) => (KEYS as string[]).includes(k));
   const page = Math.max(1, Number(params.get('page')) || 1);
   const pp = options.per_page.includes(Number(params.get('pp'))) ? Number(params.get('pp')) : 25;
@@ -144,6 +165,7 @@ export default function Research({ mode }: { mode: Mode }) {
                 <ResultsHead total={res.total} noun={people ? 'people' : 'companies'} summary={people ? 'surnames are masked until the push' : undefined}>
                   <PerPage value={pp} options={options.per_page} onChange={(n) => search(filters, { pp: String(n) })} />
                 </ResultsHead>
+                <Criteria groups={critGroups} />
                 {mode === 'industries' && rows.length > 0 && (
                   <div className="rowtools">
                     <a className="btn secondary sm" onClick={() => nav(`/people?${filtersToQuery({ oids: rows.map((r) => r.id), sen: ['vp', 'head', 'director', 'manager'], dep: ['master_operations', 'supply_chain', 'logistics', 'quality_management'] })}`)}><Icon name="people" />Find buyers at these {rows.length} companies</a>
@@ -255,7 +277,7 @@ function PeopleTable({ rows, picks, toggle, roles, setRole, roleList, onAll, icp
           {rows.map((p) => (
             <tr key={p.id} className={`${p.in_lp ? 'dim' : ''}${picks.has(p.id) ? ' sel' : ''}${icp[p.id]?.level === 'icp' ? ' hot' : icp[p.id]?.level === 'target' ? ' high' : ''}`.trim()}>
               <td><input type="checkbox" checked={picks.has(p.id)} onChange={(e) => toggle(p.id, e.target.checked)} aria-label={`Select ${fullName(p)}`} /></td>
-              <td><span className="nm">{fullName(p)}</span>{p.city && <span className="st">{p.city}</span>}{p.email && <span className="st">{p.email}</span>}</td>
+              <td><div className="who"><span className="av" style={{ ['--h' as string]: hue(fullName(p)) }}>{initials(p.first, p.last)}</span><div><span className="nm">{fullName(p)}</span>{p.city && <span className="st">{p.city}</span>}{p.email && <span className="st">{p.email}</span>}</div></div></td>
               <td>{p.title}</td>
               <td><span className="nm">{p.company}</span>{p.domain && <span className="st">{p.domain}</span>}</td>
               <td><IcpPill m={icp[p.id]} /> <InLp p={p} /> {(p.has_email || p.email) && <span className="pill good">email</span>} {p.has_phone && <span className="pill">phone</span>} {(p.has_city || p.city) && <span className="pill">location</span>}{!(p.in_lp || p.has_email || p.email || p.has_phone || p.has_city || p.city) && <span className="status">—</span>}</td>
@@ -277,14 +299,14 @@ function CompaniesTable({ rows, picks, toggle, onAll, onPeople }: { rows: Org[];
           {rows.map((o) => (
             <tr key={o.id} className={picks.has(o.id) ? 'sel' : ''}>
               <td><input type="checkbox" checked={picks.has(o.id)} onChange={(e) => toggle(o.id, e.target.checked)} aria-label={`Select ${o.name}`} /></td>
-              <td><div className="co">{o.logo && <img className="logo" src={o.logo} alt="" loading="lazy" />}<div><span className="nm">{o.name}</span><span className="st">{o.domain}</span></div></div></td>
-              <td>{o.industry ? cap(o.industry) : <span className="status">—</span>}</td>
+              <td><div className="co who">{o.logo ? <img className="logo" src={o.logo} alt="" loading="lazy" /> : <span className="av co">{(o.name || '?').slice(0, 1).toUpperCase()}</span>}<div><span className="nm">{o.name}</span><span className="st">{o.domain}</span></div></div></td>
+              <td>{o.industry ? <span className="pill ind">{cap(o.industry)}</span> : <span className="status">—</span>}</td>
               <td className="num">{o.employees ? nf(o.employees) : <span className="status">—</span>}</td>
               <td>{hq(o) || <span className="status">—</span>}</td>
               <td className="num">{o.revenue ? `$${o.revenue}` : <span className="status">—</span>}</td>
               <td className="num">{o.founded || <span className="status">—</span>}</td>
-              <td>{[o.website && <a key="w" href={o.website} target="_blank" rel="noopener">web</a>, o.linkedin && <a key="l" href={o.linkedin} target="_blank" rel="noopener">LinkedIn</a>, o.phone && <span key="p" className="status">{o.phone}</span>].filter(Boolean).reduce<ReactNode[]>((acc, x, i) => (i ? [...acc, ' · ', x] : [x]), []) || <span className="status">—</span>}</td>
-              <td className="num"><a className="btn ghost sm" onClick={() => onPeople(o.domain)} title={`People at ${o.name}`}><Icon name="people" />People</a></td>
+              <td><div className="links">{o.website && <a className="lnk" href={o.website} target="_blank" rel="noopener" title="Website" aria-label={`${o.name} website`}><Icon name="globe" /></a>}{o.linkedin && <a className="lnk" href={o.linkedin} target="_blank" rel="noopener" title="LinkedIn" aria-label={`${o.name} on LinkedIn`}><Icon name="linkedin" /></a>}{o.phone && <a className="lnk" href={`tel:${o.phone.replace(/[^+\d]/g, '')}`} title={o.phone} aria-label={`Call ${o.name}, ${o.phone}`}><Icon name="phone" /></a>}</div></td>
+              <td className="num rowbtn"><a className="btn secondary sm" onClick={() => onPeople(o.domain)} title={`People at ${o.name}`}><Icon name="people" />People</a></td>
             </tr>
           ))}
         </tbody>

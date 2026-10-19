@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { api, cap, errText, fullName, hq, nf, outOfCredits } from '../api';
+import { api, cap, errText, fullName, hq, nf, outOfCredits, hue, initials } from '../api';
 import { useApp } from '../App';
 import { useBusy } from '../components/Busy';
 import { Chips } from '../components/Chips';
@@ -95,8 +95,8 @@ export default function Lookup() {
               <input type="text" value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="flowserve.com" autoComplete="off" aria-label="Company domain" autoFocus />
               <button className="btn" type="submit" disabled={!domain.trim()}><Icon name="search" />Search</button>
             </div>
-            <details className="fg" style={{ border: 0, marginTop: 8 }} open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
-              <summary style={{ padding: '8px 0' }}>More options: how many people, which titles and seniority, ImportGenius findings</summary>
+            <details className="fg lookup-more" open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
+              <summary>More options: how many people, which titles and seniority, ImportGenius findings</summary>
               <div className="form-grid" style={{ padding: '4px 0 8px' }}>
                 <div><label className="f" htmlFor="lpp">People to pull</label><select className="in" id="lpp" value={pp} onChange={(e) => setPp(Number(e.target.value))}>{[5, 10, 25, 50].map((n) => <option key={n} value={n}>{n}</option>)}</select></div>
                 <div><span className="f">Seniority</span><Checks options={sixOpts} selected={sen} onChange={setSen} /></div>
@@ -116,20 +116,23 @@ export default function Lookup() {
               <h2>Company</h2>
               <p className="sub">What is on file, plus your import findings</p>
               <div className="org">
-                <div>
-                  <p className="desc"><strong>{r.org.name}</strong>{r.org.description && <> — {r.org.description}</>}</p>
-                  {imports.trim() && <p className="desc"><strong>Imports:</strong> {imports}</p>}
-                  {r.org.keywords.length > 0 && <div className="kw">{r.org.keywords.map((k) => <span key={k}>{k}</span>)}</div>}
+                <div className="org-head">
+                  <span className="av">{r.org.logo ? <img src={r.org.logo} alt="" /> : (r.org.name || '?').slice(0, 1).toUpperCase()}</span>
+                  <div><h3>{r.org.name}</h3><span className="st">{r.org.domain}{r.org.industry ? ` · ${cap(r.org.industry)}` : ''}</span></div>
                 </div>
-                <dl>
-                  <dt>Industry</dt><dd>{r.org.industry ? cap(r.org.industry) : '—'}</dd>
-                  <dt>Size</dt><dd>{r.org.employees ? `${nf(r.org.employees)} employees (${sizeBucket(r.org.employees)})` : '—'}</dd>
-                  <dt>Revenue</dt><dd>{r.org.revenue ? `$${r.org.revenue}` : '—'}</dd>
-                  <dt>HQ</dt><dd>{hq(r.org) || '—'}</dd>
-                  <dt>Founded</dt><dd>{r.org.founded || '—'}</dd>
-                  <dt>Website</dt><dd>{r.org.website ? <a href={r.org.website} target="_blank" rel="noopener">{r.org.website.replace(/^https?:\/\//, '')}</a> : '—'}</dd>
-                  <dt>LinkedIn</dt><dd>{r.org.linkedin ? <a href={r.org.linkedin} target="_blank" rel="noopener">company page</a> : '—'}</dd>
-                </dl>
+                {r.org.description && <p className="desc">{r.org.description}</p>}
+                {imports.trim() && <p className="desc"><strong>Imports:</strong> {imports}</p>}
+                {r.org.keywords.length > 0 && <div className="kw">{r.org.keywords.map((k) => <span key={k}>{k}</span>)}</div>}
+                <div className="facts">
+                  <div><span>Industry</span><b>{r.org.industry ? cap(r.org.industry) : '—'}</b></div>
+                  <div><span>Size</span><b>{r.org.employees ? `${nf(r.org.employees)} employees` : '—'}</b></div>
+                  <div><span>Revenue</span><b>{r.org.revenue ? `$${r.org.revenue}` : '—'}</b></div>
+                  <div><span>Headquarters</span><b>{hq(r.org) || '—'}</b></div>
+                  <div><span>Founded</span><b>{r.org.founded || '—'}</b></div>
+                  <div><span>Size band</span><b>{r.org.employees ? sizeBucket(r.org.employees) : '—'}</b></div>
+                  <div><span>Website</span><b>{r.org.website ? <a href={r.org.website} target="_blank" rel="noopener">{r.org.website.replace(/^https?:\/\//, '')}</a> : '—'}</b></div>
+                  <div><span>LinkedIn</span><b>{r.org.linkedin ? <a href={r.org.linkedin} target="_blank" rel="noopener">company page</a> : '—'}</b></div>
+                </div>
               </div>
             </div>
           </section>
@@ -148,7 +151,7 @@ export default function Lookup() {
                         {r.people.map((p) => (
                           <tr key={p.id} className={`${p.in_lp ? 'dim' : ''}${picks.has(p.id) ? ' sel' : ''}`.trim()}>
                             <td><input type="checkbox" checked={picks.has(p.id)} onChange={(e) => setPicks((s) => { const n = new Set(s); if (e.target.checked) n.add(p.id); else n.delete(p.id); return n; })} aria-label={`Push ${fullName(p)}`} /></td>
-                            <td><span className="nm">{fullName(p)} <InLp p={p} /></span>{p.city && <span className="st">{p.city}</span>}</td>
+                            <td><div className="who"><span className="av" style={{ ['--h' as string]: hue(fullName(p)) }}>{initials(p.first, p.last)}</span><div><span className="nm">{fullName(p)} <InLp p={p} /></span>{p.city && <span className="st">{p.city}</span>}</div></div></td>
                             <td>{p.title}</td>
                             <td><select aria-label="Role" value={roles[p.id] || p.role || c.profile.roles[c.profile.roles.length - 1]} onChange={(e) => setRoles((m) => ({ ...m, [p.id]: e.target.value }))}>{c.profile.roles.map((x) => <option key={x}>{x}</option>)}</select></td>
                             <td>{p.email ? p.email : p.has_email ? <span className="pill good">yes, revealed on push</span> : <span className="status">none</span>}</td>

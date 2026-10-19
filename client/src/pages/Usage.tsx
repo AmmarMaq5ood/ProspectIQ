@@ -5,8 +5,9 @@ import { Icon } from '../components/Icon';
 import { Errors } from '../components/ui';
 import { CreditsRing, Num } from '../components/Motion';
 import type { CreditEntry, Credits, PlanRow, UsageSummary } from '../types';
+import { Delta, DotColumns } from '../components/Charts';
 
-interface UsageRes { summary: UsageSummary; plan?: PlanRow[]; prices?: Record<string, [number, number]>; show_cost?: boolean; credits?: Credits; ledger?: CreditEntry[] }
+interface UsageRes { summary: UsageSummary; prev?: UsageSummary['totals']; plan?: PlanRow[]; prices?: Record<string, [number, number]>; show_cost?: boolean; credits?: Credits; ledger?: CreditEntry[] }
 
 /** Research-database and GPT consumption. Client view at /usage; the admin sees any client's with adminSlug. */
 export default function Usage({ adminSlug, timezone }: { adminSlug?: string; timezone?: string } = {}) {
@@ -29,6 +30,8 @@ export default function Usage({ adminSlug, timezone }: { adminSlug?: string; tim
   const plan = data.plan || [];
   const showCost = data.show_cost !== false;
   const credits = data.credits;
+  const than = `the ${s.days} days before`;
+  const prev = data.prev;
 
   return (
     <>
@@ -52,11 +55,11 @@ export default function Usage({ adminSlug, timezone }: { adminSlug?: string; tim
       )}
 
       <section className="kpis" aria-label="Totals">
-        <div className="kpi hero"><div className="l">Research searches</div><div className="v"><Num value={t.searches} /></div><div className="n">{nf(t.results)} results returned · free</div></div>
-        <div className="kpi"><div className="l">Lookups</div><div className="v"><Num value={t.lookups} /></div><div className="n">person and company lookups</div></div>
+        <div className="kpi hero"><div className="l">Research searches</div><div className="v"><Num value={t.searches} /></div><div className="n">{nf(t.results)} results returned · free</div>{prev && <Delta now={t.searches} prev={prev.searches} than={than} />}</div>
+        <div className="kpi"><div className="l">Lookups</div><div className="v"><Num value={t.lookups} /></div><div className="n">person and company lookups</div>{prev && <Delta now={t.lookups} prev={prev.lookups} than={than} />}</div>
         <div className="kpi"><div className="l">{showCost ? 'Lookup credits spent' : 'Leads added with email'}</div><div className="v"><Num value={showCost ? t.credits : (credits?.used ?? t.credits)} /></div><div className="n">{showCost ? 'one per revealed work email' : 'one credit each'}</div></div>
-        <div className="kpi"><div className="l">GPT calls</div><div className="v"><Num value={t.gpt_calls} /></div><div className="n">requests read and fit lines written</div></div>
-        <div className="kpi"><div className="l">GPT tokens</div><div className="v"><Num value={t.tokens_in + t.tokens_out} format={fmtN} /></div><div className="n">{fmtN(t.tokens_in)} in · {fmtN(t.tokens_out)} out</div></div>
+        <div className="kpi"><div className="l">GPT calls</div><div className="v"><Num value={t.gpt_calls} /></div><div className="n">requests read and fit lines written</div>{prev && <Delta now={t.gpt_calls} prev={prev.gpt_calls} than={than} />}</div>
+        <div className="kpi"><div className="l">GPT tokens</div><div className="v"><Num value={t.tokens_in + t.tokens_out} format={fmtN} /></div><div className="n">{fmtN(t.tokens_in)} in · {fmtN(t.tokens_out)} out</div>{prev && <Delta now={t.tokens_in + t.tokens_out} prev={prev.tokens_in + prev.tokens_out} than={than} />}</div>
         {showCost
           ? <div className="kpi"><div className="l">GPT cost</div><div className="v">{t.gpt_calls ? usd(t.cost) : '—'}</div><div className="n">{t.cost_known ? 'from the model prices on the server' : 'some models have no price set'}{t.apollo_errors + t.gpt_errors > 0 && <> · <span className="od">{nf(t.apollo_errors + t.gpt_errors)} failed calls</span></>}</div></div>
           : <div className="kpi"><div className="l">Credits left</div><div className="v"><Num value={credits?.left ?? 0} /></div><div className="n">{nf(credits?.used ?? 0)} used of {nf(credits?.total ?? 0)} · resets {credits?.resets_label ?? ''}</div></div>}
@@ -85,13 +88,13 @@ export default function Usage({ adminSlug, timezone }: { adminSlug?: string; tim
       <section className="grid two" aria-label="By day">
         <div className="card">
           <h2>Lookup credits by day</h2>
-          <p className="sub">Credits are the only research cost: one per work email revealed on push or by a finder.</p>
-          <Bars rows={s.by_day.map((d) => [d.day, d.credits])} cls="c-single" empty="No credits spent in this period." dimZero />
+          <p className="sub">One per work email revealed on push or by a finder. Each dot is a share of the busiest day; hover a day for its count.</p>
+          <DotColumns title="Lookup credits by day" color="mint" data={s.by_day.map((d) => ({ label: d.day, value: d.credits, sub: `${nf(d.searches)} searches` }))} empty="No credits spent in this period." />
         </div>
         <div className="card">
           <h2>GPT tokens by day</h2>
           <p className="sub">Input plus output tokens across all models.</p>
-          <Bars rows={s.by_day.map((d) => [d.day, d.tokens])} cls="c-associates" empty="No GPT calls in this period." dimZero />
+          <DotColumns title="GPT tokens by day" color="violet" format={fmtN} data={s.by_day.map((d) => ({ label: d.day, value: d.tokens, sub: showCost && d.cost ? usd(d.cost) : undefined }))} empty="No GPT calls in this period." />
         </div>
       </section>
 
