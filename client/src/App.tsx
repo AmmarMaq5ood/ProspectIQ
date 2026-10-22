@@ -16,6 +16,7 @@ import Login from './pages/Login';
 import Scout from './pages/Scout';
 import Research from './pages/Research';
 import Lookup from './pages/Lookup';
+import Places from './pages/Places';
 import Finders from './pages/Finders';
 import TargetingPage from './pages/Targeting';
 import Usage from './pages/Usage';
@@ -95,6 +96,7 @@ export default function App() {
             <Route path="companies" element={<Research key="companies" mode="companies" />} />
             <Route path="industries" element={<Research key="industries" mode="industries" />} />
             <Route path="lookup" element={<Lookup />} />
+            <Route path="local" element={<Places />} />
             <Route path="finders" element={<Finders />} />
             <Route path="targeting" element={<TargetingPage />} />
             <Route path="activity" element={<Activity />} />
@@ -138,6 +140,7 @@ function Shell() {
         <NavLink to="/companies" className={on}><Icon name="building" />Companies</NavLink>
         <NavLink to="/industries" className={on}><Icon name="chart" />Industries</NavLink>
         <NavLink to="/lookup" className={on}><Icon name="link" />Company lookup</NavLink>
+        <NavLink to="/local" className={on}><Icon name="pin" />Local businesses</NavLink>
         <NavLink to="/finders" className={on}><Icon name="calendar" />Daily finders</NavLink>
         <NavLink to="/targeting" className={on}><Icon name="filter" />Targeting</NavLink>
         {(c.show_activity || me.admin) && <NavLink to="/activity" className={on}><Icon name="clock" />Activity</NavLink>}

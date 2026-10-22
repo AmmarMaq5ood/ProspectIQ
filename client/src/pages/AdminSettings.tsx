@@ -4,8 +4,8 @@ import { Icon } from '../components/Icon';
 import { Errors, Notice } from '../components/ui';
 import type { SecretState } from '../types';
 
-type KeyId = 'openai' | 'apollo' | 'treg';
-const KEY_ROWS: [KeyId, string, string][] = [['apollo', 'Research database key', 'Searches, lookups and the work-email reveals. Every client without a key of their own uses this.'], ['openai', 'OpenAI key (GPT)', 'Reads plain-words requests and writes the fit lines.'], ['treg', 'treg.to key', 'Email waterfall across 100+ providers for leads the research database has no email for. Switched on per client under Keys.']];
+type KeyId = 'openai' | 'apollo' | 'treg' | 'serpapi';
+const KEY_ROWS: [KeyId, string, string][] = [['apollo', 'Research database key', 'Searches, lookups and the work-email reveals. Every client without a key of their own uses this.'], ['openai', 'OpenAI key (GPT)', 'Reads plain-words requests and writes the fit lines.'], ['treg', 'treg.to key', 'Email waterfall across 100+ providers for leads the research database has no email for. Switched on per client under Keys.'], ['serpapi', 'Google Maps key (SerpAPI)', 'The Local businesses tab: hotels, restaurants, clinics, dealers and other places by kind and area. Without a key the tab shows sample places.']];
 
 /** Agency-wide settings: the one menu link for every sub-account, and the support email clients see. */
 export default function AdminSettings() {
@@ -16,7 +16,8 @@ export default function AdminSettings() {
   const [support, setSupport] = useState('');
   const [creditCost, setCreditCost] = useState('');
   const [keys, setKeys] = useState<Record<KeyId, SecretState> | null>(null);
-  const [draft, setDraft] = useState<Record<KeyId, string>>({ openai: '', apollo: '', treg: '' });
+  const [draft, setDraft] = useState<Record<KeyId, string>>({ openai: '', apollo: '', treg: '', serpapi: '' });
+  const [mapsCost, setMapsCost] = useState('');
   const saveKey = async (k: KeyId, value: string | null) => {
     setErr(''); setOk('');
     if (value === null && !confirm('Remove this key? Clients without a key of their own stop using it; the server .env key, if any, takes over.')) return;
@@ -25,11 +26,17 @@ export default function AdminSettings() {
   };
   const [ok, setOk] = useState('');
   const [err, setErr] = useState('');
-  useEffect(() => { api<{ url: string; docs_url?: string; support_email?: string; credit_cost?: number; keys?: Record<KeyId, SecretState> }>('/admin/link').then((r) => { setLink(r.url); setDocsUrl(r.docs_url || ''); setSupport(r.support_email || ''); setCreditCost(r.credit_cost ? String(r.credit_cost) : ''); setKeys(r.keys || null); }).catch((e) => setErr(errText(e))); }, []);
+  useEffect(() => { api<{ url: string; docs_url?: string; support_email?: string; credit_cost?: number; maps_cost?: number; keys?: Record<KeyId, SecretState> }>('/admin/link').then((r) => { setLink(r.url); setDocsUrl(r.docs_url || ''); setSupport(r.support_email || ''); setCreditCost(r.credit_cost ? String(r.credit_cost) : ''); setMapsCost(r.maps_cost ? String(r.maps_cost) : ''); setKeys(r.keys || null); }).catch((e) => setErr(errText(e))); }, []);
   const saveCost = async (e: FormEvent) => {
     e.preventDefault();
     setErr(''); setOk('');
     try { const r = await api<{ credit_cost: number }>('/admin/settings', { method: 'PUT', body: { credit_cost: Number(creditCost) || 0 } }); setCreditCost(r.credit_cost ? String(r.credit_cost) : ''); setOk('Credit cost saved. The Costs page uses it from now on.'); }
+    catch (x) { setErr(errText(x)); }
+  };
+  const saveMapsCost = async (e: FormEvent) => {
+    e.preventDefault();
+    setErr(''); setOk('');
+    try { const r = await api<{ maps_cost: number }>('/admin/settings', { method: 'PUT', body: { maps_cost: Number(mapsCost) || 0 } }); setMapsCost(r.maps_cost ? String(r.maps_cost) : ''); setOk('Maps search cost saved. The Costs page uses it from now on.'); }
     catch (x) { setErr(errText(x)); }
   };
 
@@ -105,6 +112,15 @@ export default function AdminSettings() {
         <p className="sub">What one research credit costs us in dollars, from the research plan (plan price ÷ credits included). The Costs page turns credit counts into dollars with it. Leave at 0 to show counts only. GPT prices per model are set on the server.</p>
         <form className="newc" onSubmit={saveCost}>
           <div><label className="f" htmlFor="cc">Dollars per credit</label><input type="number" id="cc" min={0} step={0.001} value={creditCost} onChange={(e) => setCreditCost(e.target.value)} placeholder="0.03" inputMode="decimal" /></div>
+          <div />
+          <button className="btn" type="submit"><Icon name="check" />Save</button>
+        </form>
+      </section>
+      <section className="card" style={{ marginBottom: 12 }}>
+        <h2>Google Maps search cost</h2>
+        <p className="sub">What one Google Maps search costs us in dollars, from the SerpAPI plan (plan price ÷ searches included). The Costs page prices the Local businesses tab with it. Leave at 0 to show counts only.</p>
+        <form className="newc" onSubmit={saveMapsCost}>
+          <div><label className="f" htmlFor="mc">Dollars per search</label><input type="number" id="mc" min={0} step={0.001} value={mapsCost} onChange={(e) => setMapsCost(e.target.value)} placeholder="0.015" inputMode="decimal" /></div>
           <div />
           <button className="btn" type="submit"><Icon name="check" />Save</button>
         </form>

@@ -105,6 +105,30 @@ export interface Org {
   enriched: boolean;
 }
 
+/** A local business from Google Maps. */
+export interface Place {
+  id: string;
+  name: string;
+  category: string;
+  types: string[];
+  address: string;
+  city: string;
+  state: string;
+  country: string;
+  phone: string;
+  website: string;
+  domain: string;
+  rating: number | null;
+  reviews: number;
+  price: string;
+  lat: number | null;
+  lng: number | null;
+  open_state: string;
+  description: string;
+  thumbnail: string;
+  maps_url: string;
+}
+
 export interface SearchResult<T> {
   rows: T[];
   total: number;
@@ -167,6 +191,8 @@ export interface Client {
     apollo: string;
     /** treg.to (email waterfall), stored for when it is wired in. */
     treg: string;
+    /** SerpAPI (Google Maps), for the Local businesses tab. */
+    serpapi?: string;
   };
   /** Monthly credits: one per lead added to Launchpad with a work email. `monthly` resets `used` on the 1st; `extra` is this month's bonus. */
   credits: { monthly: number; used: number; period: string; extra: number };
@@ -210,7 +236,7 @@ export interface RecentSearch {
 export interface UsageRow {
   t: number;
   ctx: string;
-  p: 'apollo' | 'openai' | 'treg';
+  p: 'apollo' | 'openai' | 'treg' | 'serpapi';
   ok: 0 | 1;
   ms: number;
   ep?: string;

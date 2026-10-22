@@ -13,7 +13,8 @@ import path from 'node:path';
 import { config } from './config.js';
 import { logActivity, readActivity, readActivityAll } from './activity.js';
 import { autoPushState, dayKeyIn, finderLimitText, maxFinders } from './autopush.js';
-import { costReport, featureOf, lastMonths, monthKey } from './costs.js';
+import { addRow, costReport, emptyLine, featureOf, lastMonths, monthKey } from './costs.js';
+import { parseAddress, placeShape, placeToOrg, samplePlaces } from './places.js';
 import { isFreeMail, pickEmail, waterfall } from './treg.js';
 import { DOC_PAGES, DOCS_DIR, fillPlaceholders, isTeam, notFoundPage, renderDoc } from './docs.js';
 import { parsePeopleList, sourceOf, statsFromRows } from './wfadmin.js';
@@ -252,6 +253,32 @@ ok('activity filters', readActivity('test', { kind: 'push' }).total === 3 && rea
   const tc: Client = { ...client, targeting: cleanTargeting({ titles: ['supply chain'], exclude: { companies: [skipCo] } }) };
   const icpRun = await runFinder(tc, { ...fd, per_run: 5, icp_only: true, seen: [] }, false);
   ok('finder ICP-only: skips leads that do not meet the targeting, keeps the rest, and does nothing special without a targeting', !!skipCo && (icpRun.icp_skipped || 0) > 0 && icpRun.pushed.length >= 1 && icpRun.pushed.every((p) => p.company !== skipCo) && /not an ICP match/.test(icpRun.text) && (anyRun.icp_skipped || 0) === 0 && anyRun.pushed.length === 5);
+}
+
+/* ---- local businesses (Google Maps) ---- */
+{
+  const a = parseAddress('1200 Collins Ave, Miami Beach, FL 33139');
+  const b = parseAddress('Calle de Alcalá 20, 28014 Madrid, Spain');
+  const c2 = parseAddress('45 Queen St W, Toronto, ON M5H 2M9, Canada');
+  const d = parseAddress('Main St', 'Austin, TX');
+  ok('places: US, European and Canadian addresses parse to city, state and country', a.city === 'Miami Beach' && a.state === 'Florida' && a.country === 'United States' && b.city === 'Madrid' && b.country === 'Spain' && c2.country === 'Canada' && c2.city === 'Toronto' && d.city === 'Austin' && d.country === '');
+  const p = placeShape({ place_id: 'ChIJ1', title: 'Harbor View Hotel', type: 'Hotel', types: ['Hotel', 'Resort'], address: '100 Ocean Dr, Miami Beach, FL 33139', phone: '+1 305-555-0101', website: 'https://www.harborviewhotel.com/rooms?src=maps', rating: 4.4, reviews: 1280, price: '$$$', gps_coordinates: { latitude: 25.78, longitude: -80.13 }, open_state: 'Open' }, 'Miami, FL');
+  ok('places: a Maps result keeps its facts and gets a domain, a city and a Maps link', p.id === 'ChIJ1' && p.category === 'Hotel' && p.domain === 'harborviewhotel.com' && p.city === 'Miami Beach' && p.state === 'Florida' && p.rating === 4.4 && p.reviews === 1280 && p.lat === 25.78 && /place_id:ChIJ1/.test(p.maps_url));
+  const noSite = placeShape({ title: 'Corner Deli', address: '1 Main St, Dallas, TX 75201' }, '');
+  ok('places: no website means no domain, and a stable id from the name and address', noSite.domain === '' && noSite.website === '' && noSite.id === 'Corner Deli|1 Main St, Dallas, TX 75201' && noSite.rating === null);
+  const o = placeToOrg(p);
+  ok('places: pushed as a company with the Maps facts in the description', o.name === 'Harbor View Hotel' && o.domain === 'harborviewhotel.com' && o.industry === 'Hotel' && o.city === 'Miami Beach' && o.phone === p.phone && /4\.4 stars from 1,280 reviews/.test(o.description) && /Address: 100 Ocean Dr/.test(o.description) && o.employees === 0);
+  const s1 = samplePlaces('hotels', 'Miami, FL', 1);
+  const s1b = samplePlaces('hotels', 'Miami, FL', 1);
+  const s3 = samplePlaces('hotels', 'Miami, FL', 3);
+  ok('places: sample mode is deterministic, pages by twenty and ends on page three', s1.rows.length === 20 && s1.more && JSON.stringify(s1) === JSON.stringify(s1b) && s1.rows[0].name === 'Harbor View Hotel' && s1.rows[0].city === 'Miami' && s1.rows[0].state === 'Florida' && s3.rows.length === 20 && !s3.more && s3.total === 60 && s1.rows.some((x) => x.domain) );
+  const line = emptyLine();
+  const rowOk: UsageRow = { t: 1, ctx: 'research:places', p: 'serpapi', ok: 1, ms: 900, ep: 'google_maps', n: 20, cost: 0 };
+  const rowErr: UsageRow = { t: 2, ctx: 'research:places', p: 'serpapi', ok: 0, ms: 300, ep: 'google_maps', err: 'x', cost: 0 };
+  addRow(line, rowOk, 0.03, 0.015); addRow(line, rowErr, 0.03, 0.015);
+  ok('costs: Maps searches are counted, priced with the Maps rate and add to the total', line.maps_calls === 2 && line.searches === 2 && Math.abs(line.maps - 0.03) < 1e-9 && line.errors === 1 && Math.abs(line.total - 0.03) < 1e-9 && featureOf('research:places') === 'Local businesses');
+  const u = usageCompute([rowOk, rowErr], 7, 'UTC');
+  ok('usage: Maps searches show as searches with their result count', u.totals.maps_calls === 2 && u.totals.searches === 1 && u.totals.maps_results === 20);
 }
 
 console.log(process.exitCode ? `FAILURES in ${n} checks` : `all ${n} checks pass`);

@@ -146,6 +146,8 @@ export interface PublicClient {
   pipeline: string;
   has_openai: boolean;
   has_apollo: boolean;
+  /** A Google Maps key is set: the Local businesses tab returns live places. */
+  has_maps: boolean;
   has_launchpad: boolean;
   credits: Credits;
   show_usage: boolean;
@@ -224,10 +226,36 @@ export interface Credits { monthly: number; extra: number; used: number; total: 
 
 export interface CompaniesPushed { results: { name: string; id: string; domain: string }[]; errors: string[]; links: string[] }
 
+/** A local business from Google Maps (the Local businesses tab). */
+export interface Place {
+  id: string;
+  name: string;
+  category: string;
+  types: string[];
+  address: string;
+  city: string;
+  state: string;
+  country: string;
+  phone: string;
+  website: string;
+  domain: string;
+  rating: number | null;
+  reviews: number;
+  price: string;
+  lat: number | null;
+  lng: number | null;
+  open_state: string;
+  description: string;
+  thumbnail: string;
+  maps_url: string;
+}
+
+export interface PlacesRes { what: string; where: string; result: SearchResult<Place> & { more: boolean }; sample: boolean; warnings: string[] }
+
 export interface UsageRow {
   t: number;
   ctx: string;
-  p: 'apollo' | 'openai' | 'treg';
+  p: 'apollo' | 'openai' | 'treg' | 'serpapi';
   ok: 0 | 1;
   ms: number;
   ep?: string;
@@ -275,9 +303,9 @@ export interface Client {
     timezone: string;
     users: Record<string, string>;
   };
-  keys: { openai: string; openai_model: string; apollo: string; treg: string };
+  keys: { openai: string; openai_model: string; apollo: string; treg: string; serpapi?: string };
   /** Never the values: whether each secret is set, its last four characters, and where it comes from. */
-  secrets?: Record<'openai' | 'apollo' | 'treg' | 'token', SecretState>;
+  secrets?: Record<'openai' | 'apollo' | 'treg' | 'serpapi' | 'token', SecretState>;
   credits: { monthly: number; used: number; period: string; extra: number };
   flags: { show_usage: boolean; show_activity: boolean; email_waterfall: boolean };
   auto_push: { daily: number; day: string; used: number; max_finders?: number };
@@ -285,7 +313,7 @@ export interface Client {
   targeting: Targeting;
 }
 
-export interface ClientRow { slug: string; name: string; enabled: boolean; created: number; connected: boolean; has_openai: boolean; has_apollo: boolean; finders: number }
+export interface ClientRow { slug: string; name: string; enabled: boolean; created: number; connected: boolean; has_openai: boolean; has_apollo: boolean; has_maps?: boolean; finders: number }
 
 export interface MenuLink { label: string; url: string }
 
@@ -296,12 +324,13 @@ export interface ActivityPage { rows: Activity[]; total: number; page: number; p
 
 export interface SecretState { set: boolean; hint: string; source: 'client' | 'agency' | 'env' | 'none' }
 
-export interface CostLine { gpt: number; gpt_known: boolean; credits: number; research: number; waterfall: number; waterfall_calls: number; waterfall_found: number; total: number; searches: number; lookups: number; gpt_calls: number; tokens: number; errors: number }
+export interface CostLine { gpt: number; gpt_known: boolean; credits: number; research: number; waterfall: number; waterfall_calls: number; waterfall_found: number; maps: number; maps_calls: number; total: number; searches: number; lookups: number; gpt_calls: number; tokens: number; errors: number }
 export interface CostReport {
   months: ({ month: string; label: string } & CostLine)[];
   selected: string;
   label: string;
   credit_cost: number;
+  maps_cost?: number;
   totals: CostLine & { clients_active: number; top_client: string; top_share: number; calls: number };
   clients: ({ slug: string; name: string; share: number; by_feature: Record<string, CostLine> } & CostLine)[];
   features: ({ feature: string; share: number } & CostLine)[];

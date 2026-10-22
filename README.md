@@ -81,6 +81,7 @@ DATA_DIR=/home/launchpadinnovations-js/prospectiq-data
 OPENAI_API_KEY=<agency key>
 OPENAI_MODEL=gpt-6-luna
 APOLLO_API_KEY=<agency key>
+SERPAPI_KEY=<agency key, optional: Google Maps for the Local businesses tab>
 LAUNCHPAD_APP_URL=https://app.launchpadinnovations.ai
 ```
 

@@ -57,6 +57,14 @@ These tabs expose every filter: titles, seniority, department, person and compan
 
 Paste one website address. ProspectIQ returns the company, the people there who match your usual titles, a drafted research note and a connection message. Tick the people you want and push; the first ticked contact gets the note and the deal.
 
+## Local businesses
+
+For hotels, restaurants, clinics, dealers and other local businesses, which the research database describes thinly, this tab searches Google Maps instead. Type what kind of business and where, such as "hotels" in "Miami, FL". Each result shows the category, rating and review count, address, phone and website, twenty a page.
+
+- Tick the businesses you want and **push**: each becomes a company record in Launchpad with its address, rating and website. No credits are spent.
+- The **People** button on a business with a website opens the People tab filtered to that company, so you can find and push the people who buy there in the usual way.
+- Searches here are free for you. Without a Google Maps key on the account the tab shows sample places.
+
 ## Daily finders
 
 A finder is a saved search that runs on its own.

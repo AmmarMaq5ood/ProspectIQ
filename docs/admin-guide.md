@@ -42,7 +42,7 @@ The client's ideal customer profile, the same form they see on their own Targeti
 
 ### Keys & limits
 
-- **Research database key** and **AI key** per client, for clients who bring their own. Blank means the agency keys.
+- **Research database key**, **AI key** and **Google Maps key** per client, for clients who bring their own. Blank means the agency keys.
 - **Automatic pushes per day**: the cap for all of the client's finders together. Default {{daily_cap}}.
 - **Finders at a time**: how many finders may be running. Default {{max_finders}}. Zero switches finders off for the account.
 - **Email waterfall**: on or off for this client. When on, pushes ask a second source for emails the research database lacks, within a time budget. The agency pays for those lookups; the client sees them as ordinary credits.
@@ -61,7 +61,8 @@ The client's own log and usage, the same views the client sees, plus the entries
 - **Team docs link**: the product overview, this guide and the changelog, for the team and sales. Clients never see these pages. Without the link or an admin sign-in, the docs show only the client guide, with no link out of Launchpad. Opening the link once unlocks the pages in that browser for 30 days.
 - **Support email**: shown to clients when they run out of credits, and in the finders' limit messages.
 - **Cost per lookup credit**: what the agency pays per credit, used by the Costs page.
-- **API keys**: the research database, the AI model and the email waterfall. Keys are shown masked once saved. **Remove** clears one. A key pasted here is used by every client without a key of their own.
+- **API keys**: the research database, the AI model, the email waterfall and Google Maps (a SerpAPI key, for the Local businesses tab). Keys are shown masked once saved. **Remove** clears one. A key pasted here is used by every client without a key of their own.
+- **Google Maps search cost**: what the agency pays per Maps search (SerpAPI plan price ÷ searches included), used by the Costs page. 0 shows counts only.
 
 ## Email waterfall
 

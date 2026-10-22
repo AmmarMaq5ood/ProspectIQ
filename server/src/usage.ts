@@ -36,6 +36,7 @@ export interface UsageSummary {
     apollo_calls: number; apollo_errors: number; gpt_calls: number; gpt_errors: number;
     tokens_in: number; tokens_out: number; cost: number; cost_known: boolean;
     waterfall_calls: number; waterfall_found: number; waterfall_cost: number;
+    maps_calls: number; maps_results: number;
   };
   by_day: { day: string; searches: number; credits: number; tokens: number; cost: number }[];
   by_ctx: Record<string, { searches: number; lookups: number; credits: number; gpt_calls: number; tokens: number; cost: number }>;
@@ -45,7 +46,7 @@ export interface UsageSummary {
 }
 
 export function usageCompute(rows: UsageRow[], days: number, timeZone: string): UsageSummary {
-  const t = { searches: 0, lookups: 0, credits: 0, results: 0, apollo_calls: 0, apollo_errors: 0, gpt_calls: 0, gpt_errors: 0, tokens_in: 0, tokens_out: 0, cost: 0, cost_known: true, waterfall_calls: 0, waterfall_found: 0, waterfall_cost: 0 };
+  const t = { searches: 0, lookups: 0, credits: 0, results: 0, apollo_calls: 0, apollo_errors: 0, gpt_calls: 0, gpt_errors: 0, tokens_in: 0, tokens_out: 0, cost: 0, cost_known: true, waterfall_calls: 0, waterfall_found: 0, waterfall_cost: 0, maps_calls: 0, maps_results: 0 };
   const dayKey = (ms: number) => new Intl.DateTimeFormat('en-US', { timeZone, month: 'short', day: 'numeric' }).format(new Date(ms));
   const byDay = new Map<string, { day: string; searches: number; credits: number; tokens: number; cost: number }>();
   for (let i = days - 1; i >= 0; i--) {
@@ -68,6 +69,9 @@ export function usageCompute(rows: UsageRow[], days: number, timeZone: string): 
       if (SEARCH_EPS.includes(ep)) { t.searches++; d.searches++; c.searches++; t.results += r.n || 0; }
       else if (LOOKUP_EPS.includes(ep)) { t.lookups++; c.lookups++; }
       t.credits += credit; d.credits += credit; c.credits += credit;
+    } else if (r.p === 'serpapi') {
+      t.maps_calls++;
+      if (r.ok) { t.searches++; d.searches++; c.searches++; t.maps_results += r.n || 0; }
     } else if (r.p === 'treg') {
       t.waterfall_calls++;
       if (r.ok) { t.waterfall_found += r.n || 0; t.waterfall_cost += r.cost || 0; }

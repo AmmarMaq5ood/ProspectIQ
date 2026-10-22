@@ -20,6 +20,7 @@ It is not for consumer businesses. The research database holds business contacts
 | **Scout** | Type a request such as "purchasing managers at valve makers in Texas with 100 to 1,000 employees". ProspectIQ reads it, shows how it was understood, lists the matches with a one-line reason each fits, and pushes the ticked ones to Launchpad. Any search can become a daily finder. |
 | **People, Companies, Industries** | The same research with every filter laid out: titles, seniority, department, locations, company size, revenue, funding, technologies, email status. Industries adds a size and headquarters breakdown and a one-click "find buyers at these companies". |
 | **Company lookup** | One website address in; the company, its buyers, a drafted research note and a connection message out. |
+| **Local businesses** | Hotels, restaurants, clinics, dealers and other local businesses from Google Maps, by kind and area, with rating, address, phone and website. Pushed as company records; the people who buy there are one click away on the People tab. |
 | **Daily finders** | Saved searches that run on their own schedule and push only new leads, with a notification through Launchpad. A finder can be told to push only ICP matches. |
 | **Targeting** | The client's ideal customer profile: titles, industries, locations, size, revenue, exclusions. Matching leads are highlighted and sorted first, tagged in Launchpad and given a lead priority. |
 | **Activity** | Every push, finder run, search and credit change, newest first. |

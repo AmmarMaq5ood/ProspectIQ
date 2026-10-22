@@ -13,13 +13,14 @@ import { DEPARTMENTS, EMAIL_STATUS, EMPLOYEE_RANGES, FUNDING, PER_PAGE, SENIORIT
 import { cleanFilters, cleanIntent, filtersActive, intentFilters, normDomain } from './rules.js';
 import { askIntent, draftProfile, fitLines, siteText, type LlmCtx } from './llm.js';
 import { sampleCompanies, sampleEnrich, sampleLookup, samplePeople } from './samples.js';
+import { MapsError, placeToOrg, samplePlaces, searchPlaces } from './places.js';
 import { draftNote, lpOf, lpReady, lpUrl, pushProspect, roleFromTitle, sizeBucket, testConnection } from './launchpad.js';
 import { countSpent, fillEmails, pushCompanies, pushPeople, waterfallPlan } from './push.js';
 import { createFinder, describe, listFinders, nextRun, runAndSave, saveFinders, annotateTargeting } from './finders.js';
 import { usageCompute, usageRead, type UsageSummary } from './usage.js';
 import { parsePeopleList, readTests, testFromSearch, testPeople, waterfallStats } from './wfadmin.js';
 import { clientDir, readJson, writeJson } from './store.js';
-import type { Client, Finder, Org, Person, Profile, RecentSearch } from './types.js';
+import type { Client, Finder, Org, Person, Place, Profile, RecentSearch } from './types.js';
 import { cleanTargeting, describeTargeting, targetingActive } from './icp.js';
 
 export const api = Router();
@@ -210,6 +211,43 @@ api.post('/lookup', requireClient('research:lookup'), wrap(async (req, res) => {
   res.json({ org, people, note, message, imports, sample });
 }));
 
+/* ---- local businesses from Google Maps ---- */
+
+api.post('/places', requireClient('research:places'), wrap(async (req, res) => {
+  const { client } = req.piq!;
+  const what = String(req.body?.what || '').trim().slice(0, 120);
+  const where = String(req.body?.where || '').trim().slice(0, 120);
+  const page = Math.max(1, Math.min(10, Number(req.body?.page) || 1));
+  if (!what) return res.status(400).json({ error: 'Say what kind of business to look for, such as hotels or dental clinics.' });
+  const key = effectiveKeys(client).serpapi;
+  const sample = req.piq!.sample || !key;
+  let result;
+  if (sample) result = samplePlaces(what, where, page);
+  else {
+    try {
+      result = await searchPlaces({ slug: client.slug, key, ctx: 'research:places', cost: agencySettings().maps_cost }, what, where, page);
+    } catch (e) {
+      if (e instanceof MapsError) return res.status(502).json({ error: e.message });
+      throw e;
+    }
+  }
+  if (!sample && page === 1) logActivity(client.slug, { kind: 'search', title: where ? `${what} in ${where}` : what, detail: `${result.rows.length}${result.more ? '+' : ''} local businesses found (Local businesses tab)`, by: 'client', ok: true, n: result.rows.length });
+  const warnings: string[] = [];
+  if (sample) warnings.push(!key ? 'No Google Maps key for this account yet: these are sample results.' : 'Sample mode: canned results, nothing is written.');
+  res.json({ what, where, result, sample, warnings });
+}));
+
+api.post('/push/places', requireClient('research:places'), wrap(async (req, res) => {
+  const { client, live, sample } = req.piq!;
+  if (sample) return res.status(400).json({ error: 'Sample mode does not push to Launchpad.' });
+  const picks = new Set((req.body?.picks || []).map(String));
+  const places = ((req.body?.places || []) as Place[]).filter((p) => p && picks.has(String(p.id)) && p.name);
+  if (!places.length) return res.status(400).json({ error: 'Tick at least one business.' });
+  const r = await pushCompanies(client, places.map(placeToOrg), live);
+  if (live) logActivity(client.slug, { kind: 'push', title: `Pushed ${r.results.length} local business${r.results.length === 1 ? '' : 'es'} to Launchpad`, detail: r.results.map((x) => x.name).join(', ') + (r.errors.length ? ` · ${r.errors.length} error${r.errors.length === 1 ? '' : 's'}` : ''), credits: 0, by: 'client', ok: r.errors.length === 0, n: r.results.length, items: r.results.map((x) => ({ name: x.name, company: x.domain, id: x.id })) });
+  res.json({ ...r, links: r.results.map((x) => lpUrl(client, 'business', x.id)) });
+}));
+
 /* ---- pushes ---- */
 
 api.post('/push/people', requireClient('research:ask'), wrap(async (req, res) => {
@@ -384,7 +422,7 @@ const admin = Router();
 admin.use(requireAdmin);
 
 admin.get('/clients', (_req, res) => {
-  res.json({ clients: listClients().map((c) => ({ slug: c.slug, name: c.name, enabled: c.enabled, created: c.created, connected: lpReady(lpOf(c)), has_openai: !!effectiveKeys(c).openai, has_apollo: !!effectiveKeys(c).apollo, finders: listFinders(c.slug).length })) });
+  res.json({ clients: listClients().map((c) => ({ slug: c.slug, name: c.name, enabled: c.enabled, created: c.created, connected: lpReady(lpOf(c)), has_openai: !!effectiveKeys(c).openai, has_apollo: !!effectiveKeys(c).apollo, has_maps: !!effectiveKeys(c).serpapi, finders: listFinders(c.slug).length })) });
 });
 
 admin.post('/clients', (req, res) => {
@@ -416,7 +454,7 @@ admin.put('/clients/:slug', (req, res) => {
   }
   if (b.keys && typeof b.keys === 'object') {
     if (typeof b.keys.openai_model === 'string') c.keys.openai_model = b.keys.openai_model.trim();
-    for (const k of ['openai', 'apollo', 'treg'] as const) {
+    for (const k of ['openai', 'apollo', 'treg', 'serpapi'] as const) {
       if (b.keys[k] === null) c.keys[k] = '';
       else if (typeof b.keys[k] === 'string' && b.keys[k].trim()) c.keys[k] = b.keys[k].trim();
     }
@@ -507,7 +545,7 @@ admin.get('/activity', (req, res) => {
 
 admin.get('/link', (_req, res) => {
   const s = agencySettings();
-  res.json({ url: universalLink(), docs_url: teamDocsUrl(), secret_set: !!s.link_secret, support_email: s.support_email, credit_cost: s.credit_cost, keys: agencyKeyStates() });
+  res.json({ url: universalLink(), docs_url: teamDocsUrl(), secret_set: !!s.link_secret, support_email: s.support_email, credit_cost: s.credit_cost, maps_cost: s.maps_cost, keys: agencyKeyStates() });
 });
 
 admin.put('/settings', (req, res) => {
@@ -522,9 +560,14 @@ admin.put('/settings', (req, res) => {
     if (!Number.isFinite(cost) || cost < 0 || cost > 100) return res.status(400).json({ error: 'The credit cost must be a number of dollars, 0 or more.' });
     patch.credit_cost = Math.round(cost * 10000) / 10000;
   }
+  if (req.body?.maps_cost !== undefined) {
+    const cost = Number(req.body.maps_cost);
+    if (!Number.isFinite(cost) || cost < 0 || cost > 100) return res.status(400).json({ error: 'The Maps search cost must be a number of dollars, 0 or more.' });
+    patch.maps_cost = Math.round(cost * 10000) / 10000;
+  }
   if (req.body?.keys && typeof req.body.keys === 'object') {
     const keys = { ...agencySettings().keys };
-    for (const k of ['openai', 'apollo', 'treg'] as const) {
+    for (const k of ['openai', 'apollo', 'treg', 'serpapi'] as const) {
       const v = req.body.keys[k];
       if (v === null) keys[k] = '';
       else if (typeof v === 'string' && v.trim()) keys[k] = v.trim();
@@ -532,7 +575,7 @@ admin.put('/settings', (req, res) => {
     patch.keys = keys;
   }
   const s = saveAgencySettings(patch);
-  res.json({ support_email: s.support_email, credit_cost: s.credit_cost, keys: agencyKeyStates() });
+  res.json({ support_email: s.support_email, credit_cost: s.credit_cost, maps_cost: s.maps_cost, keys: agencyKeyStates() });
 });
 
 /* ---- the cost report: every client's spend, by month, account, feature, model and day ---- */
@@ -540,7 +583,7 @@ admin.get('/costs', (req, res) => {
   const months = Math.max(1, Math.min(24, Number(req.query.months) || 12));
   const since = Date.now() - (months + 1) * 31 * 86400000;
   const clients = listClients().map((c) => ({ slug: c.slug, name: c.name, timezone: c.launchpad.timezone || 'UTC', rows: usageReadSince(c.slug, since) }));
-  res.json(costReport(clients, { months, selected: String(req.query.month || ''), creditCost: agencySettings().credit_cost }));
+  res.json(costReport(clients, { months, selected: String(req.query.month || ''), creditCost: agencySettings().credit_cost, mapsCost: agencySettings().maps_cost }));
 });
 
 /* ---- the email waterfall: how it has done, and a tester that pushes nothing ---- */

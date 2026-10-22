@@ -14,12 +14,13 @@ import type { UsageRow } from './types.js';
 const SEARCH_EPS = ['/mixed_people/api_search', '/mixed_companies/search'];
 const LOOKUP_EPS = ['/people/match', '/organizations/enrich', '/organizations/bulk_enrich'];
 
-export interface CostLine { gpt: number; gpt_known: boolean; credits: number; research: number; waterfall: number; waterfall_calls: number; waterfall_found: number; total: number; searches: number; lookups: number; gpt_calls: number; tokens: number; errors: number }
+export interface CostLine { gpt: number; gpt_known: boolean; credits: number; research: number; waterfall: number; waterfall_calls: number; waterfall_found: number; maps: number; maps_calls: number; total: number; searches: number; lookups: number; gpt_calls: number; tokens: number; errors: number }
 export interface CostReport {
   months: ({ month: string; label: string } & CostLine)[];
   selected: string;
   label: string;
   credit_cost: number;
+  maps_cost: number;
   totals: CostLine & { clients_active: number; top_client: string; top_share: number; calls: number };
   clients: ({ slug: string; name: string; share: number; by_feature: Record<string, CostLine> } & CostLine)[];
   features: ({ feature: string; share: number } & CostLine)[];
@@ -29,7 +30,7 @@ export interface CostReport {
 
 export interface ClientUsage { slug: string; name: string; timezone: string; rows: UsageRow[] }
 
-export const emptyLine = (): CostLine => ({ gpt: 0, gpt_known: true, credits: 0, research: 0, waterfall: 0, waterfall_calls: 0, waterfall_found: 0, total: 0, searches: 0, lookups: 0, gpt_calls: 0, tokens: 0, errors: 0 });
+export const emptyLine = (): CostLine => ({ gpt: 0, gpt_known: true, credits: 0, research: 0, waterfall: 0, waterfall_calls: 0, waterfall_found: 0, maps: 0, maps_calls: 0, total: 0, searches: 0, lookups: 0, gpt_calls: 0, tokens: 0, errors: 0 });
 
 /** YYYY-MM of a moment in a timezone. */
 export function monthKey(ms: number, timeZone: string): string {
@@ -59,13 +60,13 @@ export function lastMonths(n: number, now = Date.now()): string[] {
 
 /** Which feature a logged call belongs to, in the words the admin uses. */
 export function featureOf(ctx: string): string {
-  const map: Record<string, string> = { 'research:ask': 'Scout', 'research:people': 'People tab', 'research:companies': 'Companies tab', 'research:industries': 'Industries tab', 'research:lookup': 'Company lookup', 'research:push': 'Pushes (research tabs)', 'admin:waterfall': 'Waterfall tests', 'admin:draft': 'Admin: profile draft', usage: 'Usage page', me: 'Sign-in' };
+  const map: Record<string, string> = { 'research:ask': 'Scout', 'research:people': 'People tab', 'research:companies': 'Companies tab', 'research:industries': 'Industries tab', 'research:lookup': 'Company lookup', 'research:places': 'Local businesses', 'research:push': 'Pushes (research tabs)', 'admin:waterfall': 'Waterfall tests', 'admin:draft': 'Admin: profile draft', usage: 'Usage page', me: 'Sign-in' };
   if (map[ctx]) return map[ctx];
   if (ctx.startsWith('finder:')) return 'Daily finders';
   return 'Other';
 }
 
-export function addRow(line: CostLine, r: UsageRow, creditCost: number): void {
+export function addRow(line: CostLine, r: UsageRow, creditCost: number, mapsCost = 0): void {
   if (r.p === 'apollo') {
     if (!r.ok) { line.errors++; return; }
     const ep = r.ep || '';
@@ -74,11 +75,17 @@ export function addRow(line: CostLine, r: UsageRow, creditCost: number): void {
     const credit = r.credit || 0;
     line.credits += credit;
     line.research += credit * creditCost;
+  } else if (r.p === 'serpapi') {
+    // A failed search still counts against the plan, so it is priced; the total below includes it.
+    line.maps_calls++;
+    line.searches++;
+    line.maps += mapsCost;
+    if (!r.ok) line.errors++;
   } else if (r.p === 'treg') {
     line.waterfall_calls++;
     line.waterfall += r.cost || 0;
-    if (!r.ok) { line.errors++; return; }
-    line.waterfall_found += r.n || 0;
+    if (!r.ok) line.errors++;
+    else line.waterfall_found += r.n || 0;
   } else if (r.p === 'openai') {
     line.gpt_calls++;
     if (!r.ok) { line.errors++; return; }
@@ -86,16 +93,17 @@ export function addRow(line: CostLine, r: UsageRow, creditCost: number): void {
     if (r.cost != null) line.gpt += r.cost;
     else line.gpt_known = false;
   }
-  line.total = line.gpt + line.research + line.waterfall;
+  line.total = line.gpt + line.research + line.waterfall + line.maps;
 }
 
 const share = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 1000) / 10 : 0);
 
-export function costReport(clients: ClientUsage[], opts: { months?: number; selected?: string; creditCost?: number; now?: number } = {}): CostReport {
+export function costReport(clients: ClientUsage[], opts: { months?: number; selected?: string; creditCost?: number; mapsCost?: number; now?: number } = {}): CostReport {
   const now = opts.now ?? Date.now();
   const keys = lastMonths(Math.max(1, Math.min(24, opts.months || 12)), now);
   const selected = opts.selected && /^\d{4}-\d{2}$/.test(opts.selected) ? opts.selected : keys[keys.length - 1];
   const cc = Math.max(0, opts.creditCost || 0);
+  const mc = Math.max(0, opts.mapsCost || 0);
 
   const months = new Map<string, { month: string; label: string } & CostLine>();
   for (const k of keys) months.set(k, { month: k, label: monthLabel(k), ...emptyLine() });
@@ -112,19 +120,19 @@ export function costReport(clients: ClientUsage[], opts: { months?: number; sele
     for (const r of c.rows) {
       const mk = monthKey(r.t, c.timezone);
       const m = months.get(mk);
-      if (m) addRow(m, r, cc);
+      if (m) addRow(m, r, cc, mc);
       if (mk !== selected) continue;
       active = true;
       totals.calls++;
-      addRow(line, r, cc);
-      addRow(totals, r, cc);
+      addRow(line, r, cc, mc);
+      addRow(totals, r, cc, mc);
       const fk = featureOf(r.ctx || '');
-      addRow(line.by_feature[fk] ||= emptyLine(), r, cc);
+      addRow(line.by_feature[fk] ||= emptyLine(), r, cc, mc);
       const f = features.get(fk) || (() => { const v = { feature: fk, share: 0, ...emptyLine() }; features.set(fk, v); return v; })();
-      addRow(f, r, cc);
+      addRow(f, r, cc, mc);
       const dk = dayLabel(r.t, c.timezone);
       const d = days.get(dk) || (() => { const v = { day: dk, ...emptyLine() }; days.set(dk, v); return v; })();
-      addRow(d, r, cc);
+      addRow(d, r, cc, mc);
       if (r.p === 'openai' && r.ok) {
         const mk2 = r.model || '(unknown model)';
         const mo = models.get(mk2) || (() => { const v = { model: mk2, calls: 0, in: 0, out: 0, cost: 0, known: true }; models.set(mk2, v); return v; })();
@@ -146,7 +154,7 @@ export function costReport(clients: ClientUsage[], opts: { months?: number; sele
     months: [...months.values()],
     selected,
     label: monthLabel(selected),
-    credit_cost: cc,
+    credit_cost: cc, maps_cost: mc,
     totals,
     clients: perClient,
     features: feats,

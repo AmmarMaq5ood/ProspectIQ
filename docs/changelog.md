@@ -2,6 +2,10 @@
 
 *Changes to ProspectIQ, newest first. One entry per shipped feature.*
 
+## 22 October 2026
+
+- **Local businesses tab**: hotels, restaurants, clinics, dealers and other local businesses from Google Maps, by kind and area. Results carry the category, rating and reviews, address, phone and website, twenty a page. Ticked businesses are pushed as company records with those facts on them, at no credit cost, and a People button finds the buyers at any business with a website. Admin: a Google Maps (SerpAPI) key in Settings or per client, a per-search cost for the Costs page, and Maps searches counted on the Costs and Usage pages. Without a key the tab shows sample places.
+
 ## 19 October 2026
 
 - **Second UI pass**: the filter tabs show their active conditions above the results, people rows get avatars and companies a mark, the company lookup lays the company out as facts, Targeting is two panels with folds and a sticky save bar, and every accordion opens and closes with motion. Usage and the admin dashboards draw dotted day columns, thin stacked month bars with a legend, delta chips against the period before, and a used-against-left credits bar. Company rows link out with website, LinkedIn and phone icons, and the admin cost and waterfall breakdowns sit in full-width tables.

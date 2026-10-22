@@ -40,11 +40,11 @@ export default function AdminCosts() {
       </div>
 
       <section className="kpis" aria-label={`Totals for ${d.label}`}>
-        <div className="kpi hero"><div className="l">Total cost · {d.label}</div><div className="v">{usd(t.total)}</div><div className="n">{priced ? `${usd(t.gpt)} GPT + ${usd(t.research)} research` : `${usd(t.gpt)} GPT · research credits not priced`}{t.waterfall > 0 && ` + ${usd(t.waterfall)} waterfall`}{!t.gpt_known && <> · <span className="od">some GPT calls have no price</span></>}</div>{prevM && <Delta now={t.total} prev={prevM.total} than={prevM.label.replace(/ \d{4}$/, '')} invert format={usd} />}</div>
+        <div className="kpi hero"><div className="l">Total cost · {d.label}</div><div className="v">{usd(t.total)}</div><div className="n">{priced ? `${usd(t.gpt)} GPT + ${usd(t.research)} research` : `${usd(t.gpt)} GPT · research credits not priced`}{t.waterfall > 0 && ` + ${usd(t.waterfall)} waterfall`}{t.maps > 0 && ` + ${usd(t.maps)} Maps`}{!t.gpt_known && <> · <span className="od">some GPT calls have no price</span></>}</div>{prevM && <Delta now={t.total} prev={prevM.total} than={prevM.label.replace(/ \d{4}$/, '')} invert format={usd} />}</div>
         <div className="kpi"><div className="l">GPT cost</div><div className="v">{usd(t.gpt)}</div><div className="n">{nf(t.gpt_calls)} calls · {fmtN(t.tokens)} tokens</div>{prevM && <Delta now={t.gpt} prev={prevM.gpt} than={prevM.label.replace(/ \d{4}$/, '')} invert format={usd} />}</div>
         <div className="kpi"><div className="l">Research credits</div><div className="v"><Num value={t.credits} /></div><div className="n">{priced ? `${usd(t.research)} at ${usd(d.credit_cost)} each` : 'one per revealed work email'}</div>{prevM && <Delta now={t.credits} prev={prevM.credits} than={prevM.label.replace(/ \d{4}$/, '')} invert />}</div>
         <div className="kpi"><div className="l">Email waterfall</div><div className="v">{usd(t.waterfall)}</div><div className="n">{t.waterfall_calls ? `${nf(t.waterfall_calls)} lookups · ${nf(t.waterfall_found)} emails found` : 'no lookups this month'}</div></div>
-        <div className="kpi"><div className="l">Searches</div><div className="v"><Num value={t.searches} /></div><div className="n">free</div></div>
+        <div className="kpi"><div className="l">Searches</div><div className="v"><Num value={t.searches} /></div><div className="n">{t.maps_calls ? `${nf(t.maps_calls)} on Google Maps${d.maps_cost ? ` · ${usd(t.maps)}` : ''}` : 'free'}</div></div>
         <div className="kpi"><div className="l">Biggest account</div><div className="v" style={{ fontSize: 22 }}>{t.top_client || '—'}</div><div className="n">{t.top_client ? `${t.top_share}% of the month · ${nf(t.clients_active)} account${t.clients_active === 1 ? '' : 's'} active` : 'nothing logged this month'}</div></div>
       </section>
 
@@ -52,11 +52,11 @@ export default function AdminCosts() {
         <h2>By month</h2>
         <p className="sub">The last twelve months across every account. Click a month to see it below.</p>
         <StackedBars title="Monthly cost, GPT, research and waterfall stacked" format={usd} selected={d.months.find((m) => m.month === d.selected)?.label} onSelect={(label) => { const m = d.months.find((x) => x.label === label); if (m) setMonth(m.month); }}
-          series={[{ key: 'gpt', label: 'GPT', color: 'violet' }, { key: 'research', label: priced ? 'Research credits' : 'Research credits (not priced)', color: 'mint' }, { key: 'waterfall', label: 'Email waterfall', color: 'amber' }]}
-          data={d.months.map((m) => ({ label: m.label, parts: { gpt: m.gpt, research: m.research, waterfall: m.waterfall }, total: m.total, note: `${nf(m.credits)} credits · ${nf(m.gpt_calls)} GPT calls` }))} />
+          series={[{ key: 'gpt', label: 'GPT', color: 'violet' }, { key: 'research', label: priced ? 'Research credits' : 'Research credits (not priced)', color: 'mint' }, { key: 'waterfall', label: 'Email waterfall', color: 'amber' }, ...(d.months.some((m) => m.maps > 0) ? [{ key: 'maps', label: 'Google Maps', color: 'rose' as const }] : [])]}
+          data={d.months.map((m) => ({ label: m.label, parts: { gpt: m.gpt, research: m.research, waterfall: m.waterfall, maps: m.maps }, total: m.total, note: `${nf(m.credits)} credits · ${nf(m.gpt_calls)} GPT calls` }))} />
         <details className="tbl"><summary>Table</summary>
           <table>
-            <thead><tr><th scope="col">Month</th><th scope="col" className="num">Searches</th><th scope="col" className="num">Lookups</th><th scope="col" className="num">Credits</th><th scope="col" className="num">GPT calls</th><th scope="col" className="num">Tokens</th><th scope="col" className="num">GPT</th><th scope="col" className="num">Research</th><th scope="col" className="num">Waterfall</th><th scope="col" className="num">Total</th></tr></thead>
+            <thead><tr><th scope="col">Month</th><th scope="col" className="num">Searches</th><th scope="col" className="num">Lookups</th><th scope="col" className="num">Credits</th><th scope="col" className="num">GPT calls</th><th scope="col" className="num">Tokens</th><th scope="col" className="num">GPT</th><th scope="col" className="num">Research</th><th scope="col" className="num">Waterfall</th><th scope="col" className="num">Maps</th><th scope="col" className="num">Total</th></tr></thead>
             <tbody>{[...d.months].reverse().map((m) => <tr key={m.month}><td>{m.label}</td><Cells l={m} priced={priced} /></tr>)}</tbody>
           </table>
         </details>
@@ -130,7 +130,7 @@ export default function AdminCosts() {
 function Cells({ l, priced }: { l: CostLine; priced: boolean }) {
   return (
     <>
-      <td className="num">{nf(l.searches)}</td><td className="num">{nf(l.lookups)}</td><td className="num">{nf(l.credits)}</td><td className="num">{nf(l.gpt_calls)}</td><td className="num">{fmtN(l.tokens)}</td><td className="num">{usd(l.gpt)}</td><td className="num">{priced ? usd(l.research) : <span className="status">—</span>}</td><td className="num">{l.waterfall_calls ? usd(l.waterfall) : <span className="status">—</span>}</td><td className="num"><b>{usd(l.total)}</b></td>
+      <td className="num">{nf(l.searches)}</td><td className="num">{nf(l.lookups)}</td><td className="num">{nf(l.credits)}</td><td className="num">{nf(l.gpt_calls)}</td><td className="num">{fmtN(l.tokens)}</td><td className="num">{usd(l.gpt)}</td><td className="num">{priced ? usd(l.research) : <span className="status">—</span>}</td><td className="num">{l.waterfall_calls ? usd(l.waterfall) : <span className="status">—</span>}</td><td className="num">{l.maps_calls ? (l.maps ? usd(l.maps) : `${nf(l.maps_calls)} searches`) : <span className="status">—</span>}</td><td className="num"><b>{usd(l.total)}</b></td>
     </>
   );
 }
