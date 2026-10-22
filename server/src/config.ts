@@ -20,6 +20,8 @@ export const config = {
   tregKey: process.env.TREG_API_KEY || '',
   /** SerpAPI key: Google Maps results for the Local businesses tab. */
   serpapiKey: process.env.SERPAPI_KEY || '',
+  /** Google Maps Platform key (Places API New), preferred over SerpAPI when both are set. */
+  gmapsKey: process.env.GOOGLE_MAPS_KEY || '',
   launchpadApp: (process.env.LAUNCHPAD_APP_URL || 'https://app.launchpadinnovations.ai').replace(/\/$/, ''),
   publicUrl: (process.env.PUBLIC_URL || `http://localhost:${process.env.PORT || 3000}`).replace(/\/$/, ''),
   /** USD per million tokens [input, output], by model prefix; for the usage page. */

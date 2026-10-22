@@ -13,7 +13,7 @@ import { DEPARTMENTS, EMAIL_STATUS, EMPLOYEE_RANGES, FUNDING, PER_PAGE, SENIORIT
 import { cleanFilters, cleanIntent, filtersActive, intentFilters, normDomain } from './rules.js';
 import { askIntent, draftProfile, fitLines, siteText, type LlmCtx } from './llm.js';
 import { sampleCompanies, sampleEnrich, sampleLookup, samplePeople } from './samples.js';
-import { MapsError, placeToOrg, samplePlaces, searchPlaces } from './places.js';
+import { MapsError, placeToOrg, samplePlaces, searchPlaces, searchPlacesGoogle } from './places.js';
 import { draftNote, lpOf, lpReady, lpUrl, pushProspect, roleFromTitle, sizeBucket, testConnection } from './launchpad.js';
 import { countSpent, fillEmails, pushCompanies, pushPeople, waterfallPlan } from './push.js';
 import { createFinder, describe, listFinders, nextRun, runAndSave, saveFinders, annotateTargeting } from './finders.js';
@@ -219,13 +219,17 @@ api.post('/places', requireClient('research:places'), wrap(async (req, res) => {
   const where = String(req.body?.where || '').trim().slice(0, 120);
   const page = Math.max(1, Math.min(10, Number(req.body?.page) || 1));
   if (!what) return res.status(400).json({ error: 'Say what kind of business to look for, such as hotels or dental clinics.' });
-  const key = effectiveKeys(client).serpapi;
-  const sample = req.piq!.sample || !key;
-  let result;
+  const keys = effectiveKeys(client);
+  // Google's own Places API when its key is set, else SerpAPI, else sample places.
+  const provider: 'google' | 'serpapi' | 'sample' = req.piq!.sample ? 'sample' : keys.gmaps ? 'google' : keys.serpapi ? 'serpapi' : 'sample';
+  const sample = provider === 'sample';
+  const token = String(req.body?.token || '').slice(0, 4000);
+  let result: Awaited<ReturnType<typeof samplePlaces>> & { next_token?: string };
   if (sample) result = samplePlaces(what, where, page);
   else {
     try {
-      result = await searchPlaces({ slug: client.slug, key, ctx: 'research:places', cost: agencySettings().maps_cost }, what, where, page);
+      const ctx = { slug: client.slug, key: provider === 'google' ? keys.gmaps : keys.serpapi, ctx: 'research:places', cost: agencySettings().maps_cost };
+      result = provider === 'google' ? await searchPlacesGoogle(ctx, what, where, token, page) : await searchPlaces(ctx, what, where, page);
     } catch (e) {
       if (e instanceof MapsError) return res.status(502).json({ error: e.message });
       throw e;
@@ -233,8 +237,8 @@ api.post('/places', requireClient('research:places'), wrap(async (req, res) => {
   }
   if (!sample && page === 1) logActivity(client.slug, { kind: 'search', title: where ? `${what} in ${where}` : what, detail: `${result.rows.length}${result.more ? '+' : ''} local businesses found (Local businesses tab)`, by: 'client', ok: true, n: result.rows.length });
   const warnings: string[] = [];
-  if (sample) warnings.push(!key ? 'No Google Maps key for this account yet: these are sample results.' : 'Sample mode: canned results, nothing is written.');
-  res.json({ what, where, result, sample, warnings });
+  if (sample) warnings.push(!keys.gmaps && !keys.serpapi ? 'No Google Maps key for this account yet: these are sample results.' : 'Sample mode: canned results, nothing is written.');
+  res.json({ what, where, result, sample, provider, warnings });
 }));
 
 api.post('/push/places', requireClient('research:places'), wrap(async (req, res) => {
@@ -422,7 +426,7 @@ const admin = Router();
 admin.use(requireAdmin);
 
 admin.get('/clients', (_req, res) => {
-  res.json({ clients: listClients().map((c) => ({ slug: c.slug, name: c.name, enabled: c.enabled, created: c.created, connected: lpReady(lpOf(c)), has_openai: !!effectiveKeys(c).openai, has_apollo: !!effectiveKeys(c).apollo, has_maps: !!effectiveKeys(c).serpapi, finders: listFinders(c.slug).length })) });
+  res.json({ clients: listClients().map((c) => ({ slug: c.slug, name: c.name, enabled: c.enabled, created: c.created, connected: lpReady(lpOf(c)), has_openai: !!effectiveKeys(c).openai, has_apollo: !!effectiveKeys(c).apollo, has_maps: !!(effectiveKeys(c).gmaps || effectiveKeys(c).serpapi), finders: listFinders(c.slug).length })) });
 });
 
 admin.post('/clients', (req, res) => {
@@ -454,7 +458,7 @@ admin.put('/clients/:slug', (req, res) => {
   }
   if (b.keys && typeof b.keys === 'object') {
     if (typeof b.keys.openai_model === 'string') c.keys.openai_model = b.keys.openai_model.trim();
-    for (const k of ['openai', 'apollo', 'treg', 'serpapi'] as const) {
+    for (const k of ['openai', 'apollo', 'treg', 'serpapi', 'gmaps'] as const) {
       if (b.keys[k] === null) c.keys[k] = '';
       else if (typeof b.keys[k] === 'string' && b.keys[k].trim()) c.keys[k] = b.keys[k].trim();
     }
@@ -567,7 +571,7 @@ admin.put('/settings', (req, res) => {
   }
   if (req.body?.keys && typeof req.body.keys === 'object') {
     const keys = { ...agencySettings().keys };
-    for (const k of ['openai', 'apollo', 'treg', 'serpapi'] as const) {
+    for (const k of ['openai', 'apollo', 'treg', 'serpapi', 'gmaps'] as const) {
       const v = req.body.keys[k];
       if (v === null) keys[k] = '';
       else if (typeof v === 'string' && v.trim()) keys[k] = v.trim();

@@ -231,10 +231,10 @@ function TemplatesTab({ c, set, onSave }: { c: Client; set: (fn: (x: Client) => 
   );
 }
 
-function KeysTab({ c, set, onSave, onClear, onWaterfall }: { c: Client; set: (fn: (x: Client) => void) => void; onSave: () => void; onClear: (k: 'openai' | 'apollo' | 'treg' | 'serpapi') => void; onWaterfall: (v: boolean) => void }) {
+function KeysTab({ c, set, onSave, onClear, onWaterfall }: { c: Client; set: (fn: (x: Client) => void) => void; onSave: () => void; onClear: (k: 'openai' | 'apollo' | 'treg' | 'serpapi' | 'gmaps') => void; onWaterfall: (v: boolean) => void }) {
   const k = c.keys;
   const sec = c.secrets;
-  const row = (id: 'openai' | 'apollo' | 'treg' | 'serpapi', label: string, ph: string) => (
+  const row = (id: 'openai' | 'apollo' | 'treg' | 'serpapi' | 'gmaps', label: string, ph: string) => (
     <div>
       <label className="f" htmlFor={`k-${id}`}>{label} <KeyState s={sec?.[id]} own /></label>
       <div className="search-row">
@@ -252,7 +252,8 @@ function KeysTab({ c, set, onSave, onClear, onWaterfall }: { c: Client; set: (fn
         <div><label className="f" htmlFor="km">OpenAI model</label><input type="text" id="km" value={k.openai_model} placeholder="blank = agency default (gpt-6-luna)" onChange={(e) => set((x) => { x.keys.openai_model = e.target.value; })} /></div>
         {row('apollo', 'Research database key', 'blank = agency key')}
         {row('treg', 'treg.to key (email waterfall)', 'blank = agency key')}
-        {row('serpapi', 'Google Maps key (SerpAPI), for the Local businesses tab', 'blank = agency key')}
+        {row('gmaps', 'Google Maps Platform key (Places API), for the Local businesses tab', 'blank = agency key')}
+        {row('serpapi', 'SerpAPI key (Google Maps, alternative)', 'blank = agency key')}
       </div>
       <SaveBar hint="Keys are stored on the server in the client's record, never shown to the client." label="Save keys" onSave={onSave} />
       <div className="wfbox">

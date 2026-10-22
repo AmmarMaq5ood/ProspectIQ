@@ -250,12 +250,12 @@ export interface Place {
   maps_url: string;
 }
 
-export interface PlacesRes { what: string; where: string; result: SearchResult<Place> & { more: boolean }; sample: boolean; warnings: string[] }
+export interface PlacesRes { what: string; where: string; result: SearchResult<Place> & { more: boolean; next_token?: string }; sample: boolean; provider: 'google' | 'serpapi' | 'sample'; warnings: string[] }
 
 export interface UsageRow {
   t: number;
   ctx: string;
-  p: 'apollo' | 'openai' | 'treg' | 'serpapi';
+  p: 'apollo' | 'openai' | 'treg' | 'serpapi' | 'gmaps';
   ok: 0 | 1;
   ms: number;
   ep?: string;
@@ -303,9 +303,9 @@ export interface Client {
     timezone: string;
     users: Record<string, string>;
   };
-  keys: { openai: string; openai_model: string; apollo: string; treg: string; serpapi?: string };
+  keys: { openai: string; openai_model: string; apollo: string; treg: string; serpapi?: string; gmaps?: string };
   /** Never the values: whether each secret is set, its last four characters, and where it comes from. */
-  secrets?: Record<'openai' | 'apollo' | 'treg' | 'serpapi' | 'token', SecretState>;
+  secrets?: Record<'openai' | 'apollo' | 'treg' | 'serpapi' | 'gmaps' | 'token', SecretState>;
   credits: { monthly: number; used: number; period: string; extra: number };
   flags: { show_usage: boolean; show_activity: boolean; email_waterfall: boolean };
   auto_push: { daily: number; day: string; used: number; max_finders?: number };

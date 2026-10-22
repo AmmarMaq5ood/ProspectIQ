@@ -193,6 +193,8 @@ export interface Client {
     treg: string;
     /** SerpAPI (Google Maps), for the Local businesses tab. */
     serpapi?: string;
+    /** Google Maps Platform key with the Places API (New) enabled: the preferred source for the Local businesses tab. */
+    gmaps?: string;
   };
   /** Monthly credits: one per lead added to Launchpad with a work email. `monthly` resets `used` on the 1st; `extra` is this month's bonus. */
   credits: { monthly: number; used: number; period: string; extra: number };
@@ -236,7 +238,7 @@ export interface RecentSearch {
 export interface UsageRow {
   t: number;
   ctx: string;
-  p: 'apollo' | 'openai' | 'treg' | 'serpapi';
+  p: 'apollo' | 'openai' | 'treg' | 'serpapi' | 'gmaps';
   ok: 0 | 1;
   ms: number;
   ep?: string;

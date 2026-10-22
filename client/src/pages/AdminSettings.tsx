@@ -4,8 +4,8 @@ import { Icon } from '../components/Icon';
 import { Errors, Notice } from '../components/ui';
 import type { SecretState } from '../types';
 
-type KeyId = 'openai' | 'apollo' | 'treg' | 'serpapi';
-const KEY_ROWS: [KeyId, string, string][] = [['apollo', 'Research database key', 'Searches, lookups and the work-email reveals. Every client without a key of their own uses this.'], ['openai', 'OpenAI key (GPT)', 'Reads plain-words requests and writes the fit lines.'], ['treg', 'treg.to key', 'Email waterfall across 100+ providers for leads the research database has no email for. Switched on per client under Keys.'], ['serpapi', 'Google Maps key (SerpAPI)', 'The Local businesses tab: hotels, restaurants, clinics, dealers and other places by kind and area. Without a key the tab shows sample places.']];
+type KeyId = 'openai' | 'apollo' | 'treg' | 'serpapi' | 'gmaps';
+const KEY_ROWS: [KeyId, string, string][] = [['apollo', 'Research database key', 'Searches, lookups and the work-email reveals. Every client without a key of their own uses this.'], ['openai', 'OpenAI key (GPT)', 'Reads plain-words requests and writes the fit lines.'], ['treg', 'treg.to key', 'Email waterfall across 100+ providers for leads the research database has no email for. Switched on per client under Keys.'], ['gmaps', 'Google Maps Platform key (Places API)', 'The Local businesses tab: hotels, restaurants, clinics, dealers and other places by kind and area. A key from Google Cloud with "Places API (New)" enabled and billing on. Used ahead of the SerpAPI key when both are set; without either the tab shows sample places.'], ['serpapi', 'SerpAPI key (Google Maps, alternative)', 'Only needed if there is no Google Maps Platform key. SerpAPI fetches the same Maps results through its own service.']];
 
 /** Agency-wide settings: the one menu link for every sub-account, and the support email clients see. */
 export default function AdminSettings() {
@@ -16,7 +16,7 @@ export default function AdminSettings() {
   const [support, setSupport] = useState('');
   const [creditCost, setCreditCost] = useState('');
   const [keys, setKeys] = useState<Record<KeyId, SecretState> | null>(null);
-  const [draft, setDraft] = useState<Record<KeyId, string>>({ openai: '', apollo: '', treg: '', serpapi: '' });
+  const [draft, setDraft] = useState<Record<KeyId, string>>({ openai: '', apollo: '', treg: '', serpapi: '', gmaps: '' });
   const [mapsCost, setMapsCost] = useState('');
   const saveKey = async (k: KeyId, value: string | null) => {
     setErr(''); setOk('');
@@ -118,7 +118,7 @@ export default function AdminSettings() {
       </section>
       <section className="card" style={{ marginBottom: 12 }}>
         <h2>Google Maps search cost</h2>
-        <p className="sub">What one Google Maps search costs us in dollars, from the SerpAPI plan (plan price ÷ searches included). The Costs page prices the Local businesses tab with it. Leave at 0 to show counts only.</p>
+        <p className="sub">What one Google Maps search costs us in dollars: Google's Places API price per request after the free allowance, or a SerpAPI plan price ÷ searches included. The Costs page prices the Local businesses tab with it. Leave at 0 to show counts only.</p>
         <form className="newc" onSubmit={saveMapsCost}>
           <div><label className="f" htmlFor="mc">Dollars per search</label><input type="number" id="mc" min={0} step={0.001} value={mapsCost} onChange={(e) => setMapsCost(e.target.value)} placeholder="0.015" inputMode="decimal" /></div>
           <div />

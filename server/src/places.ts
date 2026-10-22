@@ -174,3 +174,91 @@ export function samplePlaces(what: string, where: string, page = 1): SearchResul
   const more = page < pages;
   return { rows, total: more ? page * PLACES_PER_PAGE : (page - 1) * PLACES_PER_PAGE + rows.length, page, per_page: PLACES_PER_PAGE, pages, more };
 }
+
+/* ---- Google's own Places API (New), the preferred provider ---- */
+
+/**
+ * Text Search on the Places API (New): the same "what in where" query, twenty
+ * places a page, paged by a token rather than an offset. The field mask is
+ * the whole bill: phone, website, rating and price level are "Enterprise"
+ * fields, which is the tier this tab needs, so nothing dearer is asked for.
+ */
+const GOOGLE_FIELDS = 'places.id,places.displayName,places.formattedAddress,places.addressComponents,places.nationalPhoneNumber,places.internationalPhoneNumber,places.websiteUri,places.rating,places.userRatingCount,places.priceLevel,places.types,places.primaryType,places.primaryTypeDisplayName,places.location,places.currentOpeningHours,places.googleMapsUri,nextPageToken';
+
+const PRICE: Record<string, string> = { PRICE_LEVEL_FREE: 'Free', PRICE_LEVEL_INEXPENSIVE: '$', PRICE_LEVEL_MODERATE: '$$', PRICE_LEVEL_EXPENSIVE: '$$$', PRICE_LEVEL_VERY_EXPENSIVE: '$$$$' };
+
+const humanType = (t: string) => t.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+
+/** One Places API result in ProspectIQ's shape. City, state and country come from the address components, else the address line. */
+export function googlePlaceShape(p: Record<string, any>, where = ''): Place {
+  const comps: Record<string, any>[] = Array.isArray(p.addressComponents) ? p.addressComponents : [];
+  const comp = (...kinds: string[]) => { for (const k of kinds) { const c = comps.find((x) => Array.isArray(x.types) && x.types.includes(k)); if (c) return String(c.longText || c.shortText || ''); } return ''; };
+  const address = String(p.formattedAddress || '');
+  const parsed = parseAddress(address, where);
+  const website = String(p.websiteUri || '');
+  const types: string[] = Array.isArray(p.types) ? p.types.map(String) : [];
+  const category = String(p.primaryTypeDisplayName?.text || '') || (p.primaryType ? humanType(String(p.primaryType)) : '') || (types[0] ? humanType(types[0]) : '');
+  const open = p.currentOpeningHours?.openNow;
+  return {
+    id: String(p.id || `${p.displayName?.text || ''}|${address}`),
+    name: String(p.displayName?.text || ''),
+    category,
+    types: types.map(humanType),
+    address,
+    city: comp('locality', 'postal_town', 'sublocality', 'administrative_area_level_2') || parsed.city,
+    state: comp('administrative_area_level_1') || parsed.state,
+    country: comp('country') || parsed.country,
+    phone: String(p.nationalPhoneNumber || p.internationalPhoneNumber || ''),
+    website,
+    domain: domainOf(website),
+    rating: typeof p.rating === 'number' ? p.rating : null,
+    reviews: Number(p.userRatingCount || 0),
+    price: PRICE[String(p.priceLevel || '')] || '',
+    lat: typeof p.location?.latitude === 'number' ? p.location.latitude : null,
+    lng: typeof p.location?.longitude === 'number' ? p.location.longitude : null,
+    open_state: open === true ? 'Open' : open === false ? 'Closed' : '',
+    description: '',
+    thumbnail: '',
+    maps_url: String(p.googleMapsUri || (p.id ? `https://www.google.com/maps/place/?q=place_id:${encodeURIComponent(String(p.id))}` : '')),
+  };
+}
+
+/** Why Google refused, in words that say what to fix. */
+function googleErrorText(status: number, json: Record<string, any>): string {
+  const msg = String(json.error?.message || json.error?.status || `HTTP ${status}`);
+  if (/API key not valid|API_KEY_INVALID/i.test(msg)) return 'Google says the key is not valid. Check it in Google Cloud under APIs & Services, Credentials.';
+  if (/has not been used in project|is disabled|PERMISSION_DENIED|not authorized/i.test(msg)) return 'Google refused the request. Enable "Places API (New)" for the project the key belongs to, and check the key has no API restriction that leaves it out.';
+  if (/billing/i.test(msg)) return 'Google says billing is not enabled on the project. The Places API needs a billing account, even inside the free allowance.';
+  if (status === 429 || /RESOURCE_EXHAUSTED|quota/i.test(msg)) return 'Google says the quota for the key is used up for now. Try again later or raise the quota in Google Cloud.';
+  return `Google Places search failed: ${msg}`;
+}
+
+/** One page of places from Google. Pass the previous page's `next_token` to get the next one. */
+export async function searchPlacesGoogle(m: MapsCtx, what: string, where: string, pageToken = '', page = 1): Promise<SearchResult<Place> & { more: boolean; next_token: string }> {
+  const q = where ? `${what} in ${where}` : what;
+  const body: Record<string, unknown> = { textQuery: q, pageSize: PLACES_PER_PAGE, languageCode: 'en' };
+  if (pageToken) body.pageToken = pageToken;
+  const t0 = Date.now();
+  let json: Record<string, any>;
+  let status = 0;
+  try {
+    const res = await fetch('https://places.googleapis.com/v1/places:searchText', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': m.key, 'X-Goog-FieldMask': GOOGLE_FIELDS }, body: JSON.stringify(body), signal: AbortSignal.timeout(30000) });
+    status = res.status;
+    json = (await res.json().catch(() => ({}))) as Record<string, any>;
+    if (!res.ok || json.error) {
+      const text = googleErrorText(status, json);
+      usageLog(m.slug, m.ctx, { p: 'gmaps', ok: 0, ms: Date.now() - t0, ep: 'places:searchText', err: String(json.error?.message || text).slice(0, 200), cost: m.cost || 0 });
+      throw new MapsError(text);
+    }
+  } catch (e) {
+    if (e instanceof MapsError) throw e;
+    usageLog(m.slug, m.ctx, { p: 'gmaps', ok: 0, ms: Date.now() - t0, ep: 'places:searchText', err: String((e as Error).message).slice(0, 200), cost: m.cost || 0 });
+    throw new MapsError(`Google Places search failed: ${(e as Error).message}`);
+  }
+  const list: Record<string, any>[] = Array.isArray(json.places) ? json.places : [];
+  const rows = list.map((p) => googlePlaceShape(p, where)).filter((p) => p.name);
+  const next = String(json.nextPageToken || '');
+  usageLog(m.slug, m.ctx, { p: 'gmaps', ok: 1, ms: Date.now() - t0, ep: 'places:searchText', n: rows.length, cost: m.cost || 0 });
+  const total = (page - 1) * PLACES_PER_PAGE + rows.length;
+  return { rows, total, page, per_page: PLACES_PER_PAGE, pages: next ? page + 1 : page, more: !!next, next_token: next };
+}

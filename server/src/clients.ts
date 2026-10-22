@@ -102,7 +102,7 @@ export function getClientByLocation(locationId: string): Client | null {
 
 const SETTINGS = () => path.join(config.dataDir, 'settings.json');
 
-export interface AgencyKeys { openai: string; apollo: string; treg: string; serpapi: string }
+export interface AgencyKeys { openai: string; apollo: string; treg: string; serpapi: string; gmaps: string }
 /** `maps_cost`: what one Google Maps search costs the agency in dollars (plan price / searches included); 0 = counts only. */
 export interface AgencySettings { link_secret: string; docs_secret: string; support_email: string; credit_cost: number; maps_cost: number; keys: AgencyKeys }
 
@@ -120,7 +120,7 @@ export function agencySettings(): AgencySettings {
   if (typeof s.credit_cost !== 'number' || !(s.credit_cost >= 0)) s.credit_cost = 0;
   if (typeof s.maps_cost !== 'number' || !(s.maps_cost >= 0)) s.maps_cost = 0;
   const k = (s.keys || {}) as Partial<AgencyKeys>;
-  s.keys = { openai: typeof k.openai === 'string' ? k.openai : '', apollo: typeof k.apollo === 'string' ? k.apollo : '', treg: typeof k.treg === 'string' ? k.treg : '', serpapi: typeof k.serpapi === 'string' ? k.serpapi : '' };
+  s.keys = { openai: typeof k.openai === 'string' ? k.openai : '', apollo: typeof k.apollo === 'string' ? k.apollo : '', treg: typeof k.treg === 'string' ? k.treg : '', serpapi: typeof k.serpapi === 'string' ? k.serpapi : '', gmaps: typeof k.gmaps === 'string' ? k.gmaps : '' };
   return s as AgencySettings;
 }
 
@@ -183,7 +183,7 @@ export function createClient(input: { slug: string; name: string; profile?: Part
     enabled: true,
     created: Date.now(),
     launchpad: { location_id: '', token: '', app_url: config.launchpadApp, pipeline: 'Business Development', quote_stage: 'Quoted', owner: '', timezone: 'America/New_York', users: {} },
-    keys: { openai: '', openai_model: '', apollo: '', treg: '', serpapi: '' },
+    keys: { openai: '', openai_model: '', apollo: '', treg: '', serpapi: '', gmaps: '' },
     credits: { monthly: 1000, used: 0, period: '', extra: 0 },
     flags: { show_usage: false, show_activity: true, email_waterfall: false },
     auto_push: { daily: 50, day: '', used: 0 },
@@ -194,7 +194,7 @@ export function createClient(input: { slug: string; name: string; profile?: Part
 }
 
 /** Effective keys: the client's own, else the agency's from the environment. */
-export function effectiveKeys(client: Client): { openai: string; openaiModel: string; apollo: string; treg: string; serpapi: string } {
+export function effectiveKeys(client: Client): { openai: string; openaiModel: string; apollo: string; treg: string; serpapi: string; gmaps: string } {
   const a = agencySettings().keys;
   return {
     openai: client.keys.openai || a.openai || config.openaiKey,
@@ -202,10 +202,11 @@ export function effectiveKeys(client: Client): { openai: string; openaiModel: st
     apollo: client.keys.apollo || a.apollo || config.apolloKey,
     treg: client.keys.treg || a.treg || config.tregKey,
     serpapi: client.keys.serpapi || a.serpapi || config.serpapiKey,
+    gmaps: client.keys.gmaps || a.gmaps || config.gmapsKey,
   };
 }
 
-export type SecretKind = 'openai' | 'apollo' | 'treg' | 'serpapi';
+export type SecretKind = 'openai' | 'apollo' | 'treg' | 'serpapi' | 'gmaps';
 export interface SecretState { set: boolean; hint: string; source: 'client' | 'agency' | 'env' | 'none' }
 
 /** Never the value itself: whether it is set, its last four characters, and where it comes from. */
@@ -216,9 +217,9 @@ export function maskSecret(v: string, source: SecretState['source'] = 'client'):
 /** The agency's keys as the Settings page may see them. */
 export function agencyKeyStates(): Record<SecretKind, SecretState> {
   const a = agencySettings().keys;
-  const env: Record<SecretKind, string> = { openai: config.openaiKey, apollo: config.apolloKey, treg: config.tregKey, serpapi: config.serpapiKey };
+  const env: Record<SecretKind, string> = { openai: config.openaiKey, apollo: config.apolloKey, treg: config.tregKey, serpapi: config.serpapiKey, gmaps: config.gmapsKey };
   const one = (k: SecretKind) => (a[k] ? maskSecret(a[k], 'agency') : env[k] ? maskSecret(env[k], 'env') : maskSecret('', 'none'));
-  return { openai: one('openai'), apollo: one('apollo'), treg: one('treg'), serpapi: one('serpapi') };
+  return { openai: one('openai'), apollo: one('apollo'), treg: one('treg'), serpapi: one('serpapi'), gmaps: one('gmaps') };
 }
 
 /** A client for the admin panel: secrets blanked, with their state beside them. */
@@ -226,10 +227,10 @@ export function adminView(client: Client): Client & { secrets: Record<SecretKind
   const agency = agencyKeyStates();
   const own = (k: SecretKind) => (client.keys[k] ? maskSecret(client.keys[k] || '', 'client') : agency[k]);
   const c = structuredClone(client);
-  c.keys = { ...c.keys, openai: '', apollo: '', treg: '', serpapi: '' };
+  c.keys = { ...c.keys, openai: '', apollo: '', treg: '', serpapi: '', gmaps: '' };
   const token = maskSecret(client.launchpad.token, 'client');
   c.launchpad = { ...c.launchpad, token: '' };
-  return { ...c, secrets: { openai: own('openai'), apollo: own('apollo'), treg: own('treg'), serpapi: own('serpapi'), token } };
+  return { ...c, secrets: { openai: own('openai'), apollo: own('apollo'), treg: own('treg'), serpapi: own('serpapi'), gmaps: own('gmaps'), token } };
 }
 
 /** Public view of a client for the app shell (no secrets). */
@@ -247,7 +248,7 @@ export function publicClient(client: Client) {
     has_openai: !!keys.openai,
     has_apollo: !!keys.apollo,
     /** A Google Maps key is set: the Local businesses tab returns live places. */
-    has_maps: !!keys.serpapi,
+    has_maps: !!(keys.gmaps || keys.serpapi),
     has_launchpad: !!(client.launchpad.token && client.launchpad.location_id),
     credits: creditsView(client),
     show_usage: !!client.flags.show_usage,

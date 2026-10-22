@@ -21,18 +21,22 @@ export default function Places() {
   const [err, setErr] = useState('');
   const [picks, setPicks] = useState<Set<string>>(new Set());
   const [pushed, setPushed] = useState<CompaniesPushed | null>(null);
+  // Google pages by token: each page's result carries the token for the next, kept per page so Previous works too.
+  const [tokens, setTokens] = useState<Record<number, string>>({});
 
-  const run = async (page: number) => {
+  const run = async (page: number, fresh = false) => {
     setErr(''); setPushed(null);
+    const toks = fresh ? {} : tokens;
     try {
-      const x = await busy.run(page > 1 ? 'Loading the next page… hang tight' : 'Searching Google Maps… hang tight', () => api<PlacesRes>('/places', { body: { what, where, page } }));
+      const x = await busy.run(page > 1 ? 'Loading the next page… hang tight' : 'Searching Google Maps… hang tight', () => api<PlacesRes>('/places', { body: { what, where, page, token: toks[page] || '' } }));
       setR(x); setPicks(new Set());
+      setTokens({ ...toks, [page + 1]: x.result.next_token || '' });
       if (page > 1) window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (x) {
       setErr(errText(x)); setR(null);
     }
   };
-  const search = (e: FormEvent) => { e.preventDefault(); void run(1); };
+  const search = (e: FormEvent) => { e.preventDefault(); void run(1, true); };
 
   const rows = r?.result.rows || [];
   const nSel = rows.filter((p) => picks.has(p.id)).length;

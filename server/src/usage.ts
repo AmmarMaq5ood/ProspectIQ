@@ -69,7 +69,7 @@ export function usageCompute(rows: UsageRow[], days: number, timeZone: string): 
       if (SEARCH_EPS.includes(ep)) { t.searches++; d.searches++; c.searches++; t.results += r.n || 0; }
       else if (LOOKUP_EPS.includes(ep)) { t.lookups++; c.lookups++; }
       t.credits += credit; d.credits += credit; c.credits += credit;
-    } else if (r.p === 'serpapi') {
+    } else if (r.p === 'serpapi' || r.p === 'gmaps') {
       t.maps_calls++;
       if (r.ok) { t.searches++; d.searches++; c.searches++; t.maps_results += r.n || 0; }
     } else if (r.p === 'treg') {

@@ -61,8 +61,8 @@ The client's own log and usage, the same views the client sees, plus the entries
 - **Team docs link**: the product overview, this guide and the changelog, for the team and sales. Clients never see these pages. Without the link or an admin sign-in, the docs show only the client guide, with no link out of Launchpad. Opening the link once unlocks the pages in that browser for 30 days.
 - **Support email**: shown to clients when they run out of credits, and in the finders' limit messages.
 - **Cost per lookup credit**: what the agency pays per credit, used by the Costs page.
-- **API keys**: the research database, the AI model, the email waterfall and Google Maps (a SerpAPI key, for the Local businesses tab). Keys are shown masked once saved. **Remove** clears one. A key pasted here is used by every client without a key of their own.
-- **Google Maps search cost**: what the agency pays per Maps search (SerpAPI plan price ÷ searches included), used by the Costs page. 0 shows counts only.
+- **API keys**: the research database, the AI model, the email waterfall and Google Maps for the Local businesses tab: a Google Maps Platform key from Google Cloud with "Places API (New)" enabled and billing on, or a SerpAPI key as the alternative. Google is used when both are set. Keys are shown masked once saved. **Remove** clears one. A key pasted here is used by every client without a key of their own.
+- **Google Maps search cost**: what the agency pays per Maps search (Google's per-request price after the free allowance, or a SerpAPI plan price ÷ searches included), used by the Costs page. 0 shows counts only.
 
 ## Email waterfall
 

@@ -75,7 +75,7 @@ export function addRow(line: CostLine, r: UsageRow, creditCost: number, mapsCost
     const credit = r.credit || 0;
     line.credits += credit;
     line.research += credit * creditCost;
-  } else if (r.p === 'serpapi') {
+  } else if (r.p === 'serpapi' || r.p === 'gmaps') {
     // A failed search still counts against the plan, so it is priced; the total below includes it.
     line.maps_calls++;
     line.searches++;

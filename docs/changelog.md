@@ -4,7 +4,7 @@
 
 ## 22 October 2026
 
-- **Local businesses tab**: hotels, restaurants, clinics, dealers and other local businesses from Google Maps, by kind and area. Results carry the category, rating and reviews, address, phone and website, twenty a page. Ticked businesses are pushed as company records with those facts on them, at no credit cost, and a People button finds the buyers at any business with a website. Admin: a Google Maps (SerpAPI) key in Settings or per client, a per-search cost for the Costs page, and Maps searches counted on the Costs and Usage pages. Without a key the tab shows sample places.
+- **Local businesses tab**: hotels, restaurants, clinics, dealers and other local businesses from Google Maps, by kind and area. Results carry the category, rating and reviews, address, phone and website, twenty a page. Ticked businesses are pushed as company records with those facts on them, at no credit cost, and a People button finds the buyers at any business with a website. Admin: a Google Maps Platform key (Places API) in Settings or per client, with a SerpAPI key as the alternative source, a per-search cost for the Costs page, and Maps searches counted on the Costs and Usage pages. Without a key the tab shows sample places.
 
 ## 19 October 2026
 
