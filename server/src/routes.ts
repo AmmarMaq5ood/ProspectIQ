@@ -21,7 +21,7 @@ import { usageCompute, usageRead, type UsageSummary } from './usage.js';
 import { parsePeopleList, readTests, testFromSearch, testPeople, waterfallStats } from './wfadmin.js';
 import { clientDir, readJson, writeJson } from './store.js';
 import type { Client, Finder, Org, Person, Place, Profile, RecentSearch } from './types.js';
-import { cleanTargeting, describeTargeting, targetingActive } from './icp.js';
+import { cleanTargeting, describeTargeting, effectiveTargeting, featureOn, targetingActive } from './icp.js';
 
 export const api = Router();
 
@@ -90,10 +90,18 @@ function ctxFor(req: Request, client: Client, ctx: string): Ctx {
   return { client, sample, live, apollo: { slug: client.slug, key: keys.apollo, ctx }, llm: { slug: client.slug, ctx, key: keys.openai, model: keys.openaiModel }, useGpt: live && !!keys.openai };
 }
 
+/** Routes that belong to a switchable feature (admin → Features), by their usage context. */
+const FEATURE_OF_CTX: Record<string, { flag: 'targeting' | 'local'; name: string }> = {
+  targeting: { flag: 'targeting', name: 'Targeting' },
+  'research:places': { flag: 'local', name: 'Local businesses' },
+};
+
 function requireClient(ctxName: string) {
   return (req: Request, res: Response, next: NextFunction) => {
     const client = clientFrom(req);
     if (!client) return res.status(401).json({ error: 'Sign in with your access key.' });
+    const gate = FEATURE_OF_CTX[ctxName];
+    if (gate && !featureOn(client, gate.flag) && !isAdmin(req)) return res.status(403).json({ error: `${gate.name} is not switched on for this account.` });
     req.piq = ctxFor(req, client, ctxName);
     next();
   };
@@ -338,7 +346,7 @@ api.post('/finders', requireClient('finders'), wrap(async (req, res) => {
   const { client } = req.piq!;
   const blocked = finderLimitText(maxFinders(client), listFinders(client.slug).filter((f) => f.enabled).length);
   if (blocked) return res.status(400).json({ error: blocked });
-  const f = createFinder(client, { ...(req.body || {}), icp_only: typeof req.body?.icp_only === 'boolean' ? req.body.icp_only : !!client.targeting.finders_icp_only });
+  const f = createFinder(client, { ...(req.body || {}), icp_only: typeof req.body?.icp_only === 'boolean' ? req.body.icp_only : !!effectiveTargeting(client).finders_icp_only });
   res.json({ finder: finderView(f, client.launchpad.timezone) });
 }));
 
@@ -469,6 +477,17 @@ admin.put('/clients/:slug', (req, res) => {
     if (typeof b.flags.email_waterfall === 'boolean' && b.flags.email_waterfall !== c.flags.email_waterfall) {
       c.flags.email_waterfall = b.flags.email_waterfall;
       logActivity(c.slug, { kind: 'system', title: `Email waterfall switched ${b.flags.email_waterfall ? 'on' : 'off'}`, detail: b.flags.email_waterfall ? 'Pushes and finders look up a work email for leads the research database has none for.' : '', by: 'admin', ok: true, n: 0 });
+    }
+    // Feature access: the Targeting tab (and all matching) and the Local businesses tab.
+    const features = [
+      ['targeting', 'Targeting', 'The Targeting tab is back: leads are matched, highlighted, tagged and summarised against the saved targeting again.', 'The Targeting tab is hidden. Nothing is matched or tagged, finders push everything they find, and the saved targeting is kept for later.'],
+      ['local', 'Local businesses', 'The Local businesses tab is back.', 'The Local businesses tab is hidden and Maps searches are refused for this account.'],
+    ] as const;
+    for (const [flag, name, onText, offText] of features) {
+      if (typeof b.flags[flag] === 'boolean' && b.flags[flag] !== (c.flags[flag] !== false)) {
+        c.flags[flag] = b.flags[flag];
+        logActivity(c.slug, { kind: 'system', title: `${name} switched ${b.flags[flag] ? 'on' : 'off'}`, detail: b.flags[flag] ? onText : offText, by: 'admin', ok: true, n: 0 });
+      }
     }
   }
   if (b.auto_push && typeof b.auto_push === 'object') {

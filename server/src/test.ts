@@ -19,7 +19,7 @@ import { isFreeMail, pickEmail, waterfall } from './treg.js';
 import { DOC_PAGES, DOCS_DIR, fillPlaceholders, isTeam, notFoundPage, renderDoc } from './docs.js';
 import { parsePeopleList, sourceOf, statsFromRows } from './wfadmin.js';
 import type { Client, Finder, Person, UsageRow, Org } from './types.js';
-import { blankTargeting, cleanTargeting, matchOrg, matchPerson, matchText, mentions, summaryRule, tagsFor, targetingActive } from './icp.js';
+import { blankTargeting, cleanTargeting, effectiveTargeting, featureOn, matchOrg, matchPerson, matchText, mentions, summaryRule, tagsFor, targetingActive } from './icp.js';
 
 /** Pure checks, no network: the parser, filters, samples, schedule maths, usage, drafting. */
 
@@ -73,7 +73,7 @@ ok('next run from Sat is Mon 08:30', new Intl.DateTimeFormat('en-US', { timeZone
 ok('describe', describe({ ...fd, start: 0 }, tz) === '5 a day at 08:30, weekdays');
 ok('not twice a day', !isDue({ ...fd, last_run: mon - 60000 }, tz, mon));
 
-const client: Client = { slug: 'test', name: 'Test', access_key: 'k', enabled: true, created: 0, launchpad: { location_id: '', token: '', app_url: '', pipeline: 'Business Development', quote_stage: '', owner: '', timezone: tz, users: {} }, keys: { openai: '', openai_model: '', apollo: '', treg: '' }, credits: { monthly: 1000, used: 0, period: '2026-10', extra: 0 }, flags: { show_usage: false, show_activity: true, email_waterfall: false }, auto_push: { daily: 50, day: '', used: 0 }, targeting: blankTargeting(), profile: ARTMARK_PROFILE };
+const client: Client = { slug: 'test', name: 'Test', access_key: 'k', enabled: true, created: 0, launchpad: { location_id: '', token: '', app_url: '', pipeline: 'Business Development', quote_stage: '', owner: '', timezone: tz, users: {} }, keys: { openai: '', openai_model: '', apollo: '', treg: '' }, credits: { monthly: 1000, used: 0, period: '2026-10', extra: 0 }, flags: { show_usage: false, show_activity: true, email_waterfall: false, targeting: true, local: true }, auto_push: { daily: 50, day: '', used: 0 }, targeting: blankTargeting(), profile: ARTMARK_PROFILE };
 process.env.DATA_DIR = process.env.DATA_DIR || './data-test';
 const run = await runFinder(client, { ...fd, per_run: 4 }, false);
 ok('finder sample run: 4 leads, nothing written', run.ok && run.pushed.length === 4 && /Sample run/.test(run.text) && run.seen.length >= 4);
@@ -283,6 +283,16 @@ ok('activity filters', readActivity('test', { kind: 'push' }).total === 3 && rea
   ok('costs: Maps searches are counted, priced with the Maps rate and add to the total', line.maps_calls === 2 && line.searches === 2 && Math.abs(line.maps - 0.03) < 1e-9 && line.errors === 1 && Math.abs(line.total - 0.03) < 1e-9 && featureOf('research:places') === 'Local businesses');
   const u = usageCompute([rowOk, rowErr], 7, 'UTC');
   ok('usage: Maps searches show as searches with their result count', u.totals.maps_calls === 2 && u.totals.searches === 1 && u.totals.maps_results === 20);
+}
+
+/* feature access (admin → Features) */
+{
+  const legacy = { flags: { show_usage: false, show_activity: true, email_waterfall: false } } as unknown as Pick<Client, 'flags'>;
+  ok('features: a record without the new flags has everything on', featureOn(legacy, 'targeting') && featureOn(legacy, 'local'));
+  const noTargeting: Client = { ...client, flags: { ...client.flags, targeting: false }, targeting: cleanTargeting({ titles: ['buyer'] }) };
+  ok('features: off is off, and only that feature', !featureOn(noTargeting, 'targeting') && featureOn(noTargeting, 'local'));
+  ok('features: effective targeting is the saved one when on', targetingActive(effectiveTargeting({ ...noTargeting, flags: { ...noTargeting.flags, targeting: true } })));
+  ok('features: effective targeting is blank when off, the saved one is kept', !targetingActive(effectiveTargeting(noTargeting)) && noTargeting.targeting.titles[0] === 'buyer');
 }
 
 console.log(process.exitCode ? `FAILURES in ${n} checks` : `all ${n} checks pass`);

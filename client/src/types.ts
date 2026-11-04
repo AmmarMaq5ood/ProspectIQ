@@ -157,6 +157,8 @@ export interface PublicClient {
   support_email: string;
   auto_push: AutoPush;
   targeting: Targeting;
+  /** Feature access set by the agency: whether the Targeting and Local businesses tabs exist for this account. */
+  features: { targeting: boolean; local: boolean };
 }
 
 /** The daily cap on what the finders push: used / left today, in the client's timezone. */
@@ -307,7 +309,7 @@ export interface Client {
   /** Never the values: whether each secret is set, its last four characters, and where it comes from. */
   secrets?: Record<'openai' | 'apollo' | 'treg' | 'serpapi' | 'gmaps' | 'token', SecretState>;
   credits: { monthly: number; used: number; period: string; extra: number };
-  flags: { show_usage: boolean; show_activity: boolean; email_waterfall: boolean };
+  flags: { show_usage: boolean; show_activity: boolean; email_waterfall: boolean; targeting: boolean; local: boolean };
   auto_push: { daily: number; day: string; used: number; max_finders?: number };
   profile: Profile;
   targeting: Targeting;

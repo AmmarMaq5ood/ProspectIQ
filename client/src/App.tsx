@@ -96,9 +96,9 @@ export default function App() {
             <Route path="companies" element={<Research key="companies" mode="companies" />} />
             <Route path="industries" element={<Research key="industries" mode="industries" />} />
             <Route path="lookup" element={<Lookup />} />
-            <Route path="local" element={<Places />} />
+            <Route path="local" element={me.client?.features.local === false ? <Navigate to="/" replace /> : <Places />} />
             <Route path="finders" element={<Finders />} />
-            <Route path="targeting" element={<TargetingPage />} />
+            <Route path="targeting" element={me.client?.features.targeting === false ? <Navigate to="/" replace /> : <TargetingPage />} />
             <Route path="activity" element={<Activity />} />
             <Route path="usage" element={<Usage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
@@ -140,9 +140,9 @@ function Shell() {
         <NavLink to="/companies" className={on}><Icon name="building" />Companies</NavLink>
         <NavLink to="/industries" className={on}><Icon name="chart" />Industries</NavLink>
         <NavLink to="/lookup" className={on}><Icon name="link" />Company lookup</NavLink>
-        <NavLink to="/local" className={on}><Icon name="pin" />Local businesses</NavLink>
+        {c.features.local && <NavLink to="/local" className={on}><Icon name="pin" />Local businesses</NavLink>}
         <NavLink to="/finders" className={on}><Icon name="calendar" />Daily finders</NavLink>
-        <NavLink to="/targeting" className={on}><Icon name="filter" />Targeting</NavLink>
+        {c.features.targeting && <NavLink to="/targeting" className={on}><Icon name="filter" />Targeting</NavLink>}
         {(c.show_activity || me.admin) && <NavLink to="/activity" className={on}><Icon name="clock" />Activity</NavLink>}
         {(c.show_usage || me.admin) && <NavLink to="/usage" className={on}><Icon name="chart" />Usage</NavLink>}
       </nav>

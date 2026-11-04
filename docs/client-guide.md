@@ -64,6 +64,7 @@ For hotels, restaurants, clinics, dealers and other local businesses, which the 
 - Tick the businesses you want and **push**: each becomes a company record in Launchpad with its address, rating and website. No credits are spent.
 - The **People** button on a business with a website opens the People tab filtered to that company, so you can find and push the people who buy there in the usual way.
 - Searches here are free for you. Without a Google Maps key on the account the tab shows sample places.
+- The tab is part of your plan; if you do not see it, ask your agency to switch it on.
 
 ## Daily finders
 
@@ -88,7 +89,7 @@ Limits worth knowing:
 
 ## Targeting
 
-The **Targeting** tab is where you describe who you most want to reach: job titles or title words, seniority, department, industries, locations, company size, revenue, and anything to exclude (titles, industries, locations, companies). Save it once. From then on:
+Targeting is part of your plan; if you do not see the tab, ask your agency to switch it on. The **Targeting** tab is where you describe who you most want to reach: job titles or title words, seniority, department, industries, locations, company size, revenue, and anything to exclude (titles, industries, locations, companies). Save it once. From then on:
 
 - Every result on Scout and the filter tabs is checked against it. A lead that meets every condition that could be checked is an **ICP match**, shown as a hot lead and sorted first. A lead that meets at least half is a **target match**, shown as high priority. Hover the pill to see which conditions matched, which did not, and which are not known yet.
 - **Select → ICP matches** ticks the hot leads on the page in one go.

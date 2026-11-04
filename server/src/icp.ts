@@ -1,4 +1,4 @@
-import type { IcpMatch, MatchLevel, Org, Person, Profile, Targeting } from './types.js';
+import type { Client, IcpMatch, MatchLevel, Org, Person, Profile, Targeting } from './types.js';
 
 /**
  * Targeting (the client's ideal customer profile) and the matcher.
@@ -48,6 +48,17 @@ export function configured(t: Targeting): string[] {
 }
 
 export const targetingActive = (t: Targeting | undefined | null): boolean => !!t && configured(t).length > 0;
+
+/** A per-client feature switch (admin → Features). A missing flag means on, so older records keep everything. */
+export const featureOn = (c: Pick<Client, 'flags'> | null | undefined, f: 'targeting' | 'local'): boolean => !!c && (c.flags as Partial<Record<string, unknown>> | undefined)?.[f] !== false;
+
+/**
+ * The targeting the matcher, the pushes and the finders should use: the
+ * client's own, or a blank one when the feature is switched off for them,
+ * so nothing is matched, tagged, summarised or filtered while it is off.
+ * The saved targeting itself is kept for when it comes back.
+ */
+export const effectiveTargeting = (c: Client): Targeting => (featureOn(c, 'targeting') ? c.targeting : blankTargeting());
 
 /* ---- text matching: lowercase, light stemming, phrase or all-words ---- */
 

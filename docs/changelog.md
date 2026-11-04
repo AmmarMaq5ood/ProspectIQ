@@ -2,6 +2,10 @@
 
 *Changes to ProspectIQ, newest first. One entry per shipped feature.*
 
+## 4 November 2026
+
+- **Features per client**: a new Features tab on each client in admin, one card per feature with its switch, what it does, what disappears when it is off and whether the key it needs is set, plus a preview of the client's tab bar. Targeting and Local businesses can now be switched off per client: the tab disappears, the server refuses the requests, and with Targeting off nothing is matched or tagged and finders push everything. The email waterfall, Activity and Usage switches moved here from the Credits and Keys tabs. Every change is written to the client's activity log. Existing clients keep everything they had.
+
 ## 22 October 2026
 
 - **Local businesses tab**: hotels, restaurants, clinics, dealers and other local businesses from Google Maps, by kind and area. Results carry the category, rating and reviews, address, phone and website, twenty a page. Ticked businesses are pushed as company records with those facts on them, at no credit cost, and a People button finds the buyers at any business with a website. Admin: a Google Maps Platform key (Places API) in Settings or per client, with a SerpAPI key as the alternative source, a per-search cost for the Costs page, and Maps searches counted on the Costs and Usage pages. Without a key the tab shows sample places.

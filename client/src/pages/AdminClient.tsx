@@ -13,8 +13,11 @@ import { useApp } from '../App';
 import { TargetingForm } from '../components/TargetingForm';
 import type { Angle, Client, CreditEntry, Credits, FinderView, MenuLink, Profile, AutoPush, SecretState } from '../types';
 
-type Tab = 'launchpad' | 'profile' | 'targeting' | 'templates' | 'credits' | 'keys' | 'access' | 'finders' | 'activity' | 'usage';
-const TABS: [Tab, string, string][] = [['launchpad', 'Launchpad connection', 'link'], ['profile', 'Profile', 'building'], ['targeting', 'Targeting', 'filter'], ['templates', 'Templates', 'list'], ['credits', 'Credits & visibility', 'chart'], ['keys', 'Keys', 'key'], ['access', 'Access & links', 'external'], ['finders', 'Finders', 'calendar'], ['activity', 'Activity', 'clock'], ['usage', 'Usage', 'chart']];
+type Tab = 'launchpad' | 'profile' | 'features' | 'targeting' | 'templates' | 'credits' | 'keys' | 'access' | 'finders' | 'activity' | 'usage';
+const TABS: [Tab, string, string][] = [['launchpad', 'Launchpad connection', 'link'], ['profile', 'Profile', 'building'], ['features', 'Features', 'star'], ['targeting', 'Targeting', 'filter'], ['templates', 'Templates', 'list'], ['credits', 'Credits & limits', 'chart'], ['keys', 'Keys', 'key'], ['access', 'Access & links', 'external'], ['finders', 'Finders', 'calendar'], ['activity', 'Activity', 'clock'], ['usage', 'Usage', 'chart']];
+
+/** The switches on the Features tab: what the client can use. */
+type FlagKey = 'targeting' | 'local' | 'email_waterfall' | 'show_activity' | 'show_usage';
 
 interface Loaded { client: Client; links: MenuLink[]; finders: FinderView[] }
 
@@ -78,8 +81,9 @@ export default function AdminClient() {
       }} />}
       {tab === 'targeting' && <TargetingTab c={c} set={set} onSave={() => save({ targeting: c.targeting }, 'Targeting')} />}
       {tab === 'templates' && <TemplatesTab c={c} set={set} onSave={() => save({ profile: c.profile }, 'Templates')} />}
-      {tab === 'credits' && <CreditsTab c={c} slug={slug} onToggleUsage={(v) => { set((x) => { x.flags.show_usage = v; }); save({ flags: { show_usage: v } }, 'Visibility'); }} onToggleActivity={(v) => { set((x) => { x.flags.show_activity = v; }); save({ flags: { show_activity: v } }, 'Visibility'); }} />}
-      {tab === 'keys' && <KeysTab c={c} set={set} onSave={() => save({ keys: c.keys }, 'Keys')} onClear={(k) => { if (confirm('Remove this client\'s own key? The agency key takes over.')) save({ keys: { [k]: null } }, 'Keys'); }} onWaterfall={(v) => { set((x) => { x.flags.email_waterfall = v; }); save({ flags: { email_waterfall: v } }, 'Email waterfall'); }} />}
+      {tab === 'features' && <FeaturesTab c={c} onFlag={(k, v) => { set((x) => { x.flags[k] = v; }); save({ flags: { [k]: v } }, 'Features'); }} />}
+      {tab === 'credits' && <CreditsTab c={c} slug={slug} />}
+      {tab === 'keys' && <KeysTab c={c} set={set} onSave={() => save({ keys: c.keys }, 'Keys')} onClear={(k) => { if (confirm('Remove this client\'s own key? The agency key takes over.')) save({ keys: { [k]: null } }, 'Keys'); }} />}
       {tab === 'access' && <AccessTab c={c} links={data.links} set={set} onSave={() => save({ enabled: c.enabled, name: c.name }, 'Access')} onRotate={async () => {
         if (!confirm('Rotate the access key? The old menu links stop working until you update them in Launchpad.')) return;
         try { const r = await api<{ client: Client; links: MenuLink[] }>(`/admin/clients/${encodeURIComponent(slug)}/rotate-key`, { body: {} }); setData((d) => (d ? { ...d, client: r.client, links: r.links } : d)); setC(structuredClone(r.client)); setOk('New access key issued.'); } catch (e) { setErr(errText(e)); }
@@ -231,7 +235,7 @@ function TemplatesTab({ c, set, onSave }: { c: Client; set: (fn: (x: Client) => 
   );
 }
 
-function KeysTab({ c, set, onSave, onClear, onWaterfall }: { c: Client; set: (fn: (x: Client) => void) => void; onSave: () => void; onClear: (k: 'openai' | 'apollo' | 'treg' | 'serpapi' | 'gmaps') => void; onWaterfall: (v: boolean) => void }) {
+function KeysTab({ c, set, onSave, onClear }: { c: Client; set: (fn: (x: Client) => void) => void; onSave: () => void; onClear: (k: 'openai' | 'apollo' | 'treg' | 'serpapi' | 'gmaps') => void }) {
   const k = c.keys;
   const sec = c.secrets;
   const row = (id: 'openai' | 'apollo' | 'treg' | 'serpapi' | 'gmaps', label: string, ph: string) => (
@@ -255,16 +259,12 @@ function KeysTab({ c, set, onSave, onClear, onWaterfall }: { c: Client; set: (fn
         {row('gmaps', 'Google Maps Platform key (Places API), for the Local businesses tab', 'blank = agency key')}
         {row('serpapi', 'SerpAPI key (Google Maps, alternative)', 'blank = agency key')}
       </div>
-      <SaveBar hint="Keys are stored on the server in the client's record, never shown to the client." label="Save keys" onSave={onSave} />
-      <div className="wfbox">
-        <Switch on={!!c.flags.email_waterfall} onChange={onWaterfall} label={c.flags.email_waterfall ? 'Email waterfall is on for this client' : 'Email waterfall is off for this client'} />
-        <p className="hint">When on, every push and finder run sends the leads that came back without a work email through treg.to (name + company domain across 100+ providers, verified where possible). Each lookup is a small charge, about one to two cents, logged on the Costs page. Manual pushes give it 30 seconds, finders 90. It never spends past the client's credits left. Needs a treg.to key here or in Settings{c.secrets?.treg?.set ? '' : ' (none set yet)'}.</p>
-      </div>
+      <SaveBar hint="Keys are stored on the server in the client's record, never shown to the client. Whether the email waterfall, Targeting or Local businesses are switched on is set under Features." label="Save keys" onSave={onSave} />
     </section>
   );
 }
 
-function CreditsTab({ c, slug, onToggleUsage, onToggleActivity }: { c: Client; slug: string; onToggleUsage: (v: boolean) => void; onToggleActivity: (v: boolean) => void }) {
+function CreditsTab({ c, slug }: { c: Client; slug: string }) {
   const [cr, setCr] = useState<{ credits: Credits; ledger: CreditEntry[]; auto_push?: AutoPush } | null>(null);
   const [add, setAdd] = useState(100);
   const [monthly, setMonthly] = useState(c.credits.monthly);
@@ -326,14 +326,6 @@ function CreditsTab({ c, slug, onToggleUsage, onToggleActivity }: { c: Client; s
           </div>
         </div>
       </section>
-      <section className="card" style={{ marginBottom: 12 }}>
-        <h2>What the client sees</h2>
-        <p className="sub">Clients always see their credits left in the header. The Activity tab lists every finder run, push and search with the credits each used. The Usage tab (searches, lookups, tokens, never cost) is off unless you switch it on. Cost is only ever shown in this admin panel.</p>
-        <div className="pills-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 10 }}>
-          <Switch on={c.flags.show_activity !== false} onChange={onToggleActivity} label={c.flags.show_activity !== false ? 'Activity tab is shown to this client' : 'Activity tab is hidden from this client'} />
-          <Switch on={c.flags.show_usage} onChange={onToggleUsage} label={c.flags.show_usage ? 'Usage tab is shown to this client' : 'Usage tab is hidden from this client'} />
-        </div>
-      </section>
       <section className="card">
         <h2>Credit history</h2>
         <p className="sub">Newest first. Spends come from pushes and finders; allowance changes, bonuses and monthly resets from the system and this page.</p>
@@ -381,6 +373,57 @@ function ReactFragmentRow({ label, value, onCopy, copied }: { label: string; val
     <>
       <dt>{label}</dt>
       <dd><span className="copyable"><code>{value}</code><button className="btn secondary sm" type="button" onClick={onCopy}><Icon name="copy" />{copied ? 'Copied' : 'Copy'}</button></span></dd>
+    </>
+  );
+}
+
+/**
+ * Feature access: what this client can use, one card per feature with what
+ * it does, what disappears when it is off, whether the key it needs is set,
+ * and the switch. A strip above previews the client's tab bar as it stands.
+ */
+function FeaturesTab({ c, onFlag }: { c: Client; onFlag: (k: FlagKey, v: boolean) => void }) {
+  const f = c.flags;
+  const isOn = (k: FlagKey): boolean => (k === 'show_activity' || k === 'targeting' || k === 'local' ? f[k] !== false : !!f[k]);
+  const mapsKey = !!(c.secrets?.gmaps?.set || c.secrets?.serpapi?.set);
+  const tregKey = !!c.secrets?.treg?.set;
+  const features: { k: FlagKey; icon: string; title: string; what: string; off: string; note?: { kind: 'good' | 'warn'; text: string } }[] = [
+    { k: 'targeting', icon: 'filter', title: 'Targeting', what: 'The client writes down their ideal customer once. Every result is matched against it: ICP matches are highlighted and sorted first, pushed leads get the ICP Match, Lead Priority and Research Summary fields plus the hot-lead and high-priority tags, and finders can push only matches.', off: 'The Targeting tab disappears, nothing is matched, tagged or summarised, and finders push everything they find. The saved targeting is kept for when it comes back.' },
+    { k: 'local', icon: 'pin', title: 'Local businesses', what: 'Hotels, restaurants, clinics, dealers and other local businesses from Google Maps, by kind and area, pushed as company records at no credit cost, with a People button to find the buyers there.', off: 'The Local businesses tab disappears and Maps searches are refused for this account.', note: mapsKey ? { kind: 'good', text: 'A Google Maps key is set: live places.' } : { kind: 'warn', text: 'No Google Maps key here or in Settings: the tab shows sample places until one is pasted.' } },
+    { k: 'email_waterfall', icon: 'search', title: 'Email waterfall', what: 'A second email source for leads the research database has no work email for: name and company domain across 100+ providers, verified where possible, about one to two cents a lookup, 30 seconds per manual push and 90 per finder run. It never spends past the credits left.', off: 'Pushes keep only the emails the research database returns.', note: tregKey ? { kind: 'good', text: 'A waterfall key is set.' } : { kind: 'warn', text: 'No waterfall key here or in Settings: switching on does nothing until one is pasted.' } },
+    { k: 'show_activity', icon: 'clock', title: 'Activity tab', what: 'Every finder run, push and search, with the credits each one used, and the "see its runs" link on each finder.', off: 'The tab and the link are hidden. The log still records everything, and you can read it under Activity here.' },
+    { k: 'show_usage', icon: 'chart', title: 'Usage tab', what: 'Searches, lookups and tokens by day and by feature. Never cost: cost is only ever shown in this admin panel.', off: 'The tab is hidden; Usage here still shows it to you.' },
+  ];
+  const tabs: [string, boolean][] = [['Scout', true], ['People', true], ['Companies', true], ['Industries', true], ['Company lookup', true], ['Local businesses', isOn('local')], ['Daily finders', true], ['Targeting', isOn('targeting')], ['Activity', isOn('show_activity')], ['Usage', isOn('show_usage')]];
+  const onCount = features.filter((x) => isOn(x.k)).length;
+  return (
+    <>
+      <section className="card" style={{ marginBottom: 12 }}>
+        <h2>Features</h2>
+        <p className="sub">What {c.name} can use: {onCount} of {features.length} switched on. Each switch saves at once and is written to the client's activity log. Keys, credits and limits stay on their own tabs; this page only decides what is switched on.</p>
+        <div className="feat-preview" aria-label="The client's tabs as they stand">
+          <span className="feat-preview-l">Their tabs</span>
+          {tabs.map(([name, on]) => <span key={name} className={`feat-tab${on ? '' : ' off'}`} title={on ? 'Shown' : 'Hidden'}>{name}</span>)}
+        </div>
+      </section>
+      <div className="feat-grid">
+        {features.map((x) => {
+          const v = isOn(x.k);
+          return (
+            <section key={x.k} className={`card feat-card${v ? ' on' : ''}`}>
+              <div className="feat-head">
+                <span className="feat-icon"><Icon name={x.icon} /></span>
+                <h3>{x.title}</h3>
+                <span className={`pill ${v ? 'good' : ''}`}>{v ? 'On' : 'Off'}</span>
+              </div>
+              <p className="feat-what">{x.what}</p>
+              <p className="feat-off"><b>When off:</b> {x.off}</p>
+              {x.note && v && <p className={`feat-note ${x.note.kind}`}>{x.note.text}</p>}
+              <Switch on={v} onChange={(nv) => onFlag(x.k, nv)} label={v ? `On for ${c.name}` : `Off for ${c.name}`} />
+            </section>
+          );
+        })}
+      </div>
     </>
   );
 }

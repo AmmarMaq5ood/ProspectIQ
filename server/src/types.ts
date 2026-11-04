@@ -198,7 +198,12 @@ export interface Client {
   };
   /** Monthly credits: one per lead added to Launchpad with a work email. `monthly` resets `used` on the 1st; `extra` is this month's bonus. */
   credits: { monthly: number; used: number; period: string; extra: number };
-  flags: { show_usage: boolean; show_activity: boolean; email_waterfall: boolean };
+  /**
+   * What the client can use (admin → Features). `targeting`: the Targeting
+   * tab, matching, tags and summaries; `local`: the Local businesses tab.
+   * Missing on older records means on, so nothing disappears on upgrade.
+   */
+  flags: { show_usage: boolean; show_activity: boolean; email_waterfall: boolean; targeting: boolean; local: boolean };
   /** Daily cap on what the finders push, across all of them: `used` counts leads pushed on `day` (client's timezone). */
   auto_push: { daily: number; day: string; used: number; /** finders allowed to run at the same time (default 2) */ max_finders?: number };
   profile: Profile;

@@ -14,7 +14,7 @@ import { autoPushLimitText, autoPushSpend, autoPushState } from './autopush.js';
 import { logActivity } from './activity.js';
 import { pushCompanies, pushPeople, waterfallPlan } from './push.js';
 import type { Client, Finder, Org, Person, IcpMatch, Kind } from './types.js';
-import { matchOrg, matchPerson, targetingActive } from './icp.js';
+import { effectiveTargeting, matchOrg, matchPerson, targetingActive } from './icp.js';
 
 /** Saved searches that run on their own: storage, schedule maths, one run, and the in-process scheduler. */
 
@@ -132,7 +132,7 @@ export async function runFinder(client: Client, f: Finder, live: boolean): Promi
   const intent = cleanIntent(f.intent);
   const filters = intentFilters(intent);
   const seen = new Set(f.seen || []);
-  const icpOnly = !!f.icp_only && targetingActive(client.targeting);
+  const icpOnly = !!f.icp_only && targetingActive(effectiveTargeting(client));
   const icpOf = new Map<string, IcpMatch>();
   let notIcp = 0;
   let want = Math.max(1, f.per_run);
@@ -155,7 +155,7 @@ export async function runFinder(client: Client, f: Finder, live: boolean): Promi
     const res = intent.kind === 'people' ? (live ? await searchPeople(apollo, filters, page, 25) : samplePeople(filters, page, 25)) : (live ? await searchCompanies(apollo, filters, page, 25) : sampleCompanies(filters, page, 25));
     if (!res.rows.length) break;
     if (intent.kind === 'people') await annotateInLaunchpad(client, res.rows as Person[], live);
-    if (targetingActive(client.targeting)) await annotateTargeting(client, res.rows, intent.kind, apollo, live, icpOf);
+    if (targetingActive(effectiveTargeting(client))) await annotateTargeting(client, res.rows, intent.kind, apollo, live, icpOf);
     for (const r of res.rows) {
       if (picked.length >= want) break;
       if (seen.has(r.id)) continue;
@@ -204,7 +204,7 @@ export async function runFinder(client: Client, f: Finder, live: boolean): Promi
  * before a reveal. Sets `icp` on people; companies go into `into`.
  */
 export async function annotateTargeting(client: Client, rows: (Person | Org)[], kind: Kind, apollo: ApolloCtx, live: boolean, into?: Map<string, IcpMatch>): Promise<Record<string, IcpMatch>> {
-  const t = client.targeting;
+  const t = effectiveTargeting(client);
   const out: Record<string, IcpMatch> = {};
   if (!targetingActive(t)) return out;
   if (kind === 'people') {

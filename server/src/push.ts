@@ -6,7 +6,7 @@ import { effectiveKeys } from './clients.js';
 import { creditsLeft } from './credits.js';
 import { waterfall, type TregCtx } from './treg.js';
 import type { Client, Org, Person, PushResult } from './types.js';
-import { PRIORITY, matchPerson, tagsFor, targetingActive } from './icp.js';
+import { PRIORITY, effectiveTargeting, matchPerson, tagsFor, targetingActive } from './icp.js';
 import { leadSummaries } from './llm.js';
 import type { LlmCtx } from './llm.js';
 
@@ -57,7 +57,7 @@ export async function pushPeople(client: Client, people: Person[], roles: Record
   // 2. the email waterfall for those still without one
   const wf = opts.live ? await fillEmails(client, opts.waterfall, enriched) : undefined;
   // 2b. the targeting: the verdict on the revealed facts, its tags, and a written summary per person
-  const tg = client.targeting;
+  const tg = effectiveTargeting(client);
   if (targetingActive(tg)) for (const p of enriched) { p.icp = matchPerson(tg, p) || undefined; p.tags = [...new Set([...(p.tags || []), ...tagsFor(p.icp)])]; }
   if (opts.live && lpReady(lpOf(client))) { try { await ensureLeadFields(lpOf(client), client.slug); } catch { /* the fields are a nicety; the push goes on */ } }
   const summaries = await leadSummaries(opts.llm, client.profile, tg, enriched, opts.live && !!opts.llm?.key);

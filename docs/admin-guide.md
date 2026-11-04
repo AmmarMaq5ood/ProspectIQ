@@ -28,24 +28,35 @@ Clients → **New client**, then work through the sections on the client page.
 
 ## The client page, section by section
 
-### Credits & visibility
+### Features
+
+What this client can use, one card per feature with the switch, what it does and what disappears when it is off. Each switch saves at once and is written to the client's activity log; a strip at the top previews the client's tab bar as it stands.
+
+![The Features tab: the client's tab bar as it stands, then one card per feature with its switch](img/admin-features.png)
+
+- **Targeting**: the Targeting tab and everything it drives (matching, highlights, the ICP tags and fields, lead summaries, "ICP matches only" on finders). Off hides the tab and switches matching off; finders then push everything they find. The saved targeting is kept.
+- **Local businesses**: the Google Maps tab. Off hides it and refuses Maps searches for the account. The card says whether a Maps key is set; without one the tab shows sample places.
+- **Email waterfall**: on or off for this client. When on, pushes ask a second source for emails the research database lacks, within a time budget. The agency pays for those lookups; the client sees them as ordinary credits. The card says whether a waterfall key is set.
+- **Activity tab** and **Usage tab**: whether the client sees them. Both stay readable to you here either way.
+
+New clients start with Targeting, Local businesses and Activity on, and the email waterfall and Usage off.
+
+### Credits & limits
 
 - **Monthly allowance**: the credits that reset on the 1st in the client's timezone. Default {{monthly_credits}}.
 - **Bonus credits**: extra credits for the current month only.
 - **Top up to full**: resets the month's usage so the client is back at 100% of the allowance. Use it when a client has run out mid-month and you have agreed to cover it.
-- **Show Activity** and **Show Usage**: whether the client sees those tabs.
+- **Automatic pushes per day**: the cap for all of the client's finders together. Default {{daily_cap}}.
+- **Finders at a time**: how many finders may be running. Default {{max_finders}}. Zero switches finders off for the account.
 - The ledger under the controls lists every allowance change, bonus and top-up with who did it.
 
 ### Targeting
 
 The client's ideal customer profile, the same form they see on their own Targeting tab, so you can set it up for them or tidy what they entered. Leads that meet every condition are ICP matches (hot), at least half are target matches (high priority). Both are highlighted on the client's screens, tagged in Launchpad (`icp-match`, `hot-lead`, `target-match`, `high-priority`) and written to three contact fields that ProspectIQ creates in the sub-account on the first push: ICP Match, Lead Priority and Research Summary. The summary is two or three sentences per lead written against the targeting, also added to the research note. A switch sets whether new finders push only ICP matches; each finder can still be changed on the client's Daily finders tab or under Finders here.
 
-### Keys & limits
+### Keys
 
-- **Research database key**, **AI key** and **Google Maps key** per client, for clients who bring their own. Blank means the agency keys.
-- **Automatic pushes per day**: the cap for all of the client's finders together. Default {{daily_cap}}.
-- **Finders at a time**: how many finders may be running. Default {{max_finders}}. Zero switches finders off for the account.
-- **Email waterfall**: on or off for this client. When on, pushes ask a second source for emails the research database lacks, within a time budget. The agency pays for those lookups; the client sees them as ordinary credits.
+- **Research database key**, **AI key**, **email waterfall key** and **Google Maps key** per client, for clients who bring their own. Blank means the agency keys. Whether a feature is switched on is set under Features, not here.
 
 ### Finders
 
