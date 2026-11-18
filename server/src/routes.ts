@@ -148,8 +148,9 @@ api.post('/ask', requireClient('research:ask'), wrap(async (req, res) => {
   const page = Math.max(1, Number(req.body?.page) || 1);
   const pp = PER_PAGE.includes(Number(req.body?.pp)) ? Number(req.body.pp) : 10;
   const read = await askIntent(llm, client.profile, q, useGpt);
-  // "as": the same request shown as the people at those companies, or as the companies those people work at.
-  const as = req.body?.as === 'people' || req.body?.as === 'companies' ? (req.body.as as 'people' | 'companies') : read.kind;
+  // "show": the same request shown as the people at those companies, or as the companies those people work at.
+  // (Not "as": that name is taken, in every request, by an admin acting as a client.)
+  const as = req.body?.show === 'people' || req.body?.show === 'companies' ? (req.body.show as 'people' | 'companies') : read.kind;
   let intent = as === read.kind ? read : { ...switchKind(read, as, client.profile), source: read.source, error: read.error };
   let filters = intentFilters(intent);
   const kind = intent.kind;

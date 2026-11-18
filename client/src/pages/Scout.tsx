@@ -29,8 +29,8 @@ export default function Scout() {
   const q = (params.get('q') || '').trim();
   const page = Math.max(1, Number(params.get('page')) || 1);
   const pp = options.per_page.includes(Number(params.get('pp'))) ? Number(params.get('pp')) : 10;
-  /** "as": the same request shown the other way (companies as their people, or people as their companies). */
-  const as: Kind | '' = params.get('as') === 'people' ? 'people' : params.get('as') === 'companies' ? 'companies' : '';
+  /** "show": the same request shown the other way (companies as their people, or people as their companies). The address and the request call it "show"; "as" belongs to an admin acting as a client. */
+  const as: Kind | '' = params.get('show') === 'people' ? 'people' : params.get('show') === 'companies' ? 'companies' : '';
   const landing = q === '';
   /** This search, as a key: the same request, page and view always find the same kept result. */
   const key = keepKey('ask', c.slug, { q: q.toLowerCase(), page, pp, as });
@@ -75,7 +75,7 @@ export default function Scout() {
     }
     setPushed(null); setNotice([]); setPicks(new Set()); setRoles({});
     let live = true;
-    busy.run('Searching the research database… hang tight', () => api<AskResult>('/ask', { body: { q, page, pp, lazy: true, ...(as ? { as } : {}) } }))
+    busy.run('Searching the research database… hang tight', () => api<AskResult>('/ask', { body: { q, page, pp, lazy: true, ...(as ? { show: as } : {}) } }))
       .then((r) => { if (live) { loaded.current = key; setRes(r); setAt(Date.now()); } })
       .catch((e) => { if (live) { setErr(errText(e)); setRes(null); } });
     return () => { live = false; };
@@ -135,7 +135,7 @@ export default function Scout() {
     setParams(p);
   };
   /** Same request, something changed (page, page size, view): the rest of the address stays. */
-  const stay = (over: Record<string, string>) => go(q, { ...(pp !== 10 ? { pp: String(pp) } : {}), ...(as ? { as } : {}), ...over });
+  const stay = (over: Record<string, string>) => go(q, { ...(pp !== 10 ? { pp: String(pp) } : {}), ...(as ? { show: as } : {}), ...over });
   const submit = (e: FormEvent) => {
     e.preventDefault();
     const t = text.trim();
@@ -307,7 +307,7 @@ export default function Scout() {
               <PerPage value={pp} options={options.per_page} onChange={(n) => stay({ pp: n === 10 ? '' : String(n), page: '' })} />
             </ResultsHead>
             <div className="viewrow">
-              <ViewSwitch value={kind} onChange={(v) => stay({ as: v === (res.read_kind || kind) ? '' : v, page: '' })} options={(res.read_kind || kind) === 'companies'
+              <ViewSwitch value={kind} onChange={(v) => stay({ show: v === (res.read_kind || kind) ? '' : v, page: '' })} options={(res.read_kind || kind) === 'companies'
                 ? [{ value: 'companies', label: 'Companies', icon: 'building' }, { value: 'people', label: 'People at these companies', icon: 'people' }]
                 : [{ value: 'people', label: 'People', icon: 'people' }, { value: 'companies', label: 'Their companies', icon: 'building' }]} />
               <span className="hint">{isPeople
