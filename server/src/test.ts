@@ -1,12 +1,12 @@
 import { ARTMARK_PROFILE, agencySettings } from './clients.js';
-import { cleanFilters, filtersActive, intentFilters, rulesIntent } from './rules.js';
+import { cleanFilters, filtersActive, intentFilters, rulesIntent, BUYER_SENIORITIES, blankIntent, looksLikeDomain, relaxSteps, switchKind, widenKeywords } from './rules.js';
 import { companyBody, peopleBody, DEP_CODES } from './apollo.js';
 import { fitRule } from './llm.js';
-import { sampleCompanies, sampleEnrich, sampleLookup, samplePeople } from './samples.js';
+import { sampleCompanies, sampleEnrich, sampleLookup, samplePeople, sampleNamed, sampleOrg } from './samples.js';
 import { describe, isDue, nextRun, runFinder, zonedMidnight } from './finders.js';
 import { usageCompute } from './usage.js';
 import { draftNote, roleFromTitle, sizeBucket } from './launchpad.js';
-import { matchesPerson, normCo } from './lpindex.js';
+import { matchesPerson, normCo, pickByName } from './lpindex.js';
 import { creditCheck, creditsLeft, currentPeriod, resetDate } from './credits.js';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -293,6 +293,64 @@ ok('activity filters', readActivity('test', { kind: 'push' }).total === 3 && rea
   ok('features: off is off, and only that feature', !featureOn(noTargeting, 'targeting') && featureOn(noTargeting, 'local'));
   ok('features: effective targeting is the saved one when on', targetingActive(effectiveTargeting({ ...noTargeting, flags: { ...noTargeting.flags, targeting: true } })));
   ok('features: effective targeting is blank when off, the saved one is kept', !targetingActive(effectiveTargeting(noTargeting)) && noTargeting.targeting.titles[0] === 'buyer');
+}
+
+/* 18 Nov 2026: industry words the research database matches, the companies/people switch, loosening an empty search, lookup by name */
+{
+  const kw = (x: string[]) => widenKeywords(x);
+  ok('keywords: a maker phrase becomes the product, its plural and "<product> manufacturing"', ['valve', 'valves', 'valve manufacturing'].every((k) => kw(['valve manufacturers']).includes(k)));
+  ok('keywords: a seller phrase becomes the distribution, supplies and wholesale tags, never the bare trade', ['electrical distribution', 'electrical supplies', 'electrical wholesale'].every((k) => kw(['electrical distributors']).includes(k)) && !kw(['electrical distributors']).includes('electrical'));
+  ok('keywords: "… manufacturing" also searches the plain product, with no invented plural', kw(['fire protection equipment manufacturing']).includes('fire protection equipment') && !kw(['fire protection equipment manufacturing']).includes('fire protection equipments'));
+  ok('keywords: a plain phrase is left as it is', kw(['industrial valves']).join() === 'industrial valves' && kw(['hvac']).join() === 'hvac');
+  ok('keywords: filler words go', kw(['packaging companies'])[0] === 'packaging' && kw(['pump suppliers']).includes('pumps'));
+  ok('keywords: plurals of -y and -ch words', kw(['foundry makers']).includes('foundries') && kw(['winch manufacturers']).includes('winches'));
+  ok('keywords: no duplicates, at most eight', new Set(kw(['valves', 'Valves', 'valve makers', 'valve manufacturers', 'pump makers', 'pump distributors'])).size === kw(['valves', 'Valves', 'valve makers', 'valve manufacturers', 'pump makers', 'pump distributors']).length && kw(['valve makers', 'pump makers', 'pump distributors', 'actuator makers']).length <= 8);
+
+  const co = rulesIntent('Industrial valve manufacturers in Ohio', ARTMARK_PROFILE);
+  const asPeople = switchKind(co, 'people', ARTMARK_PROFILE);
+  ok('switch: companies → people keeps the industry and the headquarters, adds the usual titles', asPeople.kind === 'people' && asPeople.titles.length > 0 && asPeople.industry_keywords.join() === co.industry_keywords.join() && asPeople.company_locations.join() === co.company_locations.join());
+  const bare = switchKind(co, 'people', { ...ARTMARK_PROFILE, default_titles: [] });
+  ok('switch: with no usual titles it is managers and up', bare.titles.length === 0 && bare.seniorities.join() === BUYER_SENIORITIES.join());
+  const pe = rulesIntent('Purchasing managers at valve makers in Texas', ARTMARK_PROFILE);
+  const asCo = switchKind(pe, 'companies');
+  ok('switch: people → companies drops the role and moves the place to the headquarters', asCo.kind === 'companies' && !asCo.titles.length && !asCo.seniorities.length && asCo.company_locations.includes('Texas, US') && !asCo.person_locations.length);
+  ok('switch: the same kind comes back untouched', switchKind(pe, 'people') === pe);
+
+  const tight = { ...pe, seniorities: ['manager'], departments: ['supply_chain'], employee_ranges: ['51,100'], person_locations: ['Houston, Texas'] };
+  const steps = relaxSteps(tight);
+  ok('relax: department, then seniority, then size, then place, each on top of the last', steps.length === 4 && !steps[0].intent.departments.length && steps[0].intent.seniorities.length === 1 && !steps[1].intent.seniorities.length && steps[1].intent.employee_ranges.length === 1 && !steps[2].intent.employee_ranges.length && steps[3].intent.person_locations[0] === 'Texas');
+  ok('relax: the request itself is never changed', tight.seniorities.length === 1 && tight.person_locations[0] === 'Houston, Texas');
+  ok('relax: a state widens to the country by its full name', relaxSteps({ ...pe, seniorities: [], departments: [], person_locations: ['Texas, US'] }).pop()?.intent.person_locations[0] === 'United States');
+  ok('relax: nothing to loosen, no steps', relaxSteps({ ...blankIntent(), kind: 'companies', industry_keywords: ['valves'], company_locations: ['Mexico'] }).length === 0);
+
+  ok('domain: web addresses in any form', looksLikeDomain('flowserve.com') && looksLikeDomain('https://www.flowserve.com/en/products') && looksLikeDomain('rasco.co.in') && looksLikeDomain(' Reliablesprinkler.com '));
+  ok('domain: names are not addresses', !looksLikeDomain('Rasco') && !looksLikeDomain('Reliable Automatic Sprinkler') && !looksLikeDomain('') && !looksLikeDomain('Smith & Co.') && !looksLikeDomain('acme inc.'));
+
+  const A = { name: 'Reliable Automatic Sprinkler Co., Inc.', domain: 'reliablesprinkler.com' }, B = { name: 'Reliable Sprinkler Services', domain: 'rss.example' }, C = { name: 'No Site Ltd', domain: '' };
+  const one = pickByName([A], 'anything');
+  ok('name: a single candidate is the answer', 'domain' in one && one.domain === A.domain && one.others.length === 0);
+  const exact = pickByName([B, A], 'reliable automatic sprinkler');
+  ok('name: the exact name wins ("Co., Inc." aside) and the rest stay reachable', 'domain' in exact && exact.domain === A.domain && exact.others.length === 1 && exact.others[0] === B);
+  const many = pickByName([A, B], 'reliable');
+  ok('name: several and none exact, the visitor chooses', 'candidates' in many && many.candidates.length === 2);
+  const none = pickByName([C], 'no site');
+  ok('name: a company with no website cannot be looked up', 'candidates' in none && none.candidates.length === 0);
+
+  const sp = samplePeople({}, 1, 25).rows, sc = sampleCompanies({}, 1, 25).rows;
+  ok('samples: one page of people shows several titles', new Set(sp.map((x) => x.title)).size >= 4);
+  ok('samples: one page of companies shows several cities and sizes', new Set(sc.map((x) => x.city)).size >= 4 && new Set(sc.map((x) => x.employees)).size >= 4);
+  const named = sampleNamed('Acme Valve');
+  ok('samples: a typed name gives three companies to choose from', named.length === 3 && 'candidates' in pickByName(named, 'Acme Valve'));
+  ok('samples: the one picked comes back under its own name', sampleLookup(named[0].domain).org.name === 'Acme Valve Systems' && sampleLookup(named[0].domain).people[0].company === 'Acme Valve Systems');
+  ok('samples: an unknown website still gets a name of its own', sampleOrg('reliablesprinkler.com').name === 'Reliablesprinkler' && sampleOrg('').name === 'Gulf Flow Systems');
+
+  const [plain] = draftNote(ARTMARK_PROFILE, sampleOrg(''), [], '');
+  const [withFindings] = draftNote(ARTMARK_PROFILE, sampleOrg(''), [], '14 shipments in 12 months');
+  ok('note: no imports line and no tool names unless findings were typed', !/Imports/.test(plain) && !/ImportGenius/i.test(plain) && plain.startsWith('RESEARCH (ProspectIQ)'));
+  ok('note: typed findings go in', /- Imports: 14 shipments in 12 months/.test(withFindings) && withFindings.startsWith('RESEARCH (ProspectIQ + import records)'));
+
+  const eng = { ...samplePeople({}, 1, 1).rows[0], title: 'Engineering Manager', has_email: false };
+  ok('fit line: "an engineering manager", "a purchasing manager"', /holds an engineering manager role/i.test(fitRule(eng, { ...blankIntent(), titles: ['engineering manager'] }, 'people')) && /holds a purchasing manager role/i.test(fitRule({ ...eng, title: 'Purchasing Manager' }, { ...blankIntent(), titles: ['purchasing manager'] }, 'people')));
 }
 
 console.log(process.exitCode ? `FAILURES in ${n} checks` : `all ${n} checks pass`);

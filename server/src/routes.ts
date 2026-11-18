@@ -7,12 +7,12 @@ import { autoPushState, finderLimitText, maxFinders } from './autopush.js';
 import { adminView, agencyKeyStates } from './clients.js';
 import { costReport, usageReadSince } from './costs.js';
 import type { AgencySettings } from './clients.js';
-import { annotateInLaunchpad, markPushed } from './lpindex.js';
+import { annotateInLaunchpad, markPushed, pickByName } from './lpindex.js';
 import { logActivity, readActivity, readActivityAll } from './activity.js';
 import { DEPARTMENTS, EMAIL_STATUS, EMPLOYEE_RANGES, FUNDING, PER_PAGE, SENIORITY, enrichPerson, orgByDomain, planLimits, searchCompanies, searchPeople, type ApolloCtx } from './apollo.js';
-import { cleanFilters, cleanIntent, filtersActive, intentFilters, normDomain } from './rules.js';
+import { cleanFilters, cleanIntent, emptyFilters, filtersActive, intentFilters, looksLikeDomain, normDomain, relaxSteps, switchKind } from './rules.js';
 import { askIntent, draftProfile, fitLines, siteText, type LlmCtx } from './llm.js';
-import { sampleCompanies, sampleEnrich, sampleLookup, samplePeople } from './samples.js';
+import { sampleCompanies, sampleEnrich, sampleLookup, sampleNamed, samplePeople } from './samples.js';
 import { MapsError, placeToOrg, samplePlaces, searchPlaces, searchPlacesGoogle } from './places.js';
 import { draftNote, lpOf, lpReady, lpUrl, pushProspect, roleFromTitle, sizeBucket, testConnection } from './launchpad.js';
 import { countSpent, fillEmails, pushCompanies, pushPeople, waterfallPlan } from './push.js';
@@ -147,13 +147,33 @@ api.post('/ask', requireClient('research:ask'), wrap(async (req, res) => {
   if (!q) return res.status(400).json({ error: 'Type what leads you are looking for.' });
   const page = Math.max(1, Number(req.body?.page) || 1);
   const pp = PER_PAGE.includes(Number(req.body?.pp)) ? Number(req.body.pp) : 10;
-  const intent = await askIntent(llm, client.profile, q, useGpt);
-  const filters = intentFilters(intent);
+  const read = await askIntent(llm, client.profile, q, useGpt);
+  // "as": the same request shown as the people at those companies, or as the companies those people work at.
+  const as = req.body?.as === 'people' || req.body?.as === 'companies' ? (req.body.as as 'people' | 'companies') : read.kind;
+  let intent = as === read.kind ? read : { ...switchKind(read, as, client.profile), source: read.source, error: read.error };
+  let filters = intentFilters(intent);
   const kind = intent.kind;
-  const result = kind === 'people' ? (live ? await searchPeople(apollo, filters, page, pp) : samplePeople(filters, page, pp)) : (live ? await searchCompanies(apollo, filters, page, pp) : sampleCompanies(filters, page, pp));
-  if (kind === 'people') await annotateInLaunchpad(client, result.rows as Person[], live);
-  const icp = await annotateTargeting(client, result.rows, kind, apollo, live);
-  const fits = await fitLines(llm, client.profile, result.rows, intent, kind, useGpt);
+  const run = (f: typeof filters) => (kind === 'people' ? (live ? searchPeople(apollo, f, page, pp) : Promise.resolve(samplePeople(f, page, pp))) : (live ? searchCompanies(apollo, f, page, pp) : Promise.resolve(sampleCompanies(f, page, pp))));
+  let result = await run(filters);
+  // Nothing matched every condition: loosen one thing at a time (searches are free) and say what was loosened.
+  let widened: string[] = [];
+  if (result.total === 0) {
+    const tried: string[] = [];
+    for (const step of relaxSteps(intent)) {
+      const f2 = intentFilters(step.intent);
+      const r2 = await run(f2);
+      tried.push(step.note);
+      if (r2.total > 0) { intent = { ...step.intent, source: read.source, error: read.error }; filters = f2; result = r2; widened = tried; break; }
+    }
+  }
+  // The written fit lines take longer than everything else together; a page that asks for them afterwards ("lazy") gets its results first.
+  const lazy = req.body?.lazy === true;
+  // Independent look-ups on the same rows, run together: who is already in Launchpad, the targeting verdicts, the fit lines.
+  const [, icp, fits] = await Promise.all([
+    kind === 'people' ? annotateInLaunchpad(client, result.rows as Person[], live) : null,
+    annotateTargeting(client, result.rows, kind, apollo, live),
+    fitLines(llm, client.profile, result.rows, intent, kind, useGpt && !lazy),
+  ]);
   if (live && page === 1) {
     recentAdd(client.slug, { q, kind, total: result.total, t: Date.now() });
     logActivity(client.slug, { kind: 'search', title: q, detail: `${result.total.toLocaleString('en-US')} ${kind} found`, by: 'client', ok: true, n: result.total });
@@ -161,7 +181,21 @@ api.post('/ask', requireClient('research:ask'), wrap(async (req, res) => {
   const warnings: string[] = [];
   if (intent.error) warnings.push(`GPT could not read the request (${intent.error}); the built-in parser was used.`);
   if (sample) warnings.push(!effectiveKeys(client).apollo ? 'No research key for this client yet: these are sample results.' : 'Sample mode: canned results, nothing is written.');
-  res.json({ q, intent, filters, kind, result, fits, icp, warnings, sample });
+  res.json({ q, intent, filters, kind, read_kind: read.kind, result, fits, fits_pending: lazy && useGpt && result.rows.length > 0, widened, icp, warnings, sample });
+}));
+
+/* ---- the written fit lines for a result already on screen ---- */
+
+api.post('/fits', requireClient('research:ask'), wrap(async (req, res) => {
+  const { client, llm, useGpt } = req.piq!;
+  const kind = req.body?.kind === 'companies' ? 'companies' : 'people';
+  const intent = cleanIntent(req.body?.intent || {});
+  const S = (v: unknown, n = 300) => String(v ?? '').slice(0, n);
+  // The rows come back from the browser: keep only the facts a fit line is written from, as plain text.
+  const rows = (Array.isArray(req.body?.rows) ? (req.body.rows as Record<string, unknown>[]) : []).filter((r) => r && r.id).slice(0, 100).map((r) => (kind === 'people'
+    ? { id: S(r.id, 60), title: S(r.title), company: S(r.company), has_email: !!r.has_email }
+    : { id: S(r.id, 60), name: S(r.name), industry: S(r.industry), employees: Number(r.employees) || 0, city: S(r.city, 80), state: S(r.state, 80), country: S(r.country, 80), revenue: S(r.revenue, 40), founded: Number(r.founded) || 0, description: S(r.description, 400) })) as unknown as (Person | Org)[];
+  res.json({ fits: await fitLines(llm, client.profile, rows, intent, kind, useGpt) });
 }));
 
 /* ---- targeting: the client's ideal customer profile ---- */
@@ -187,19 +221,33 @@ api.post('/search', requireClient('research:people'), wrap(async (req, res) => {
   const pp = PER_PAGE.includes(Number(req.body?.pp)) ? Number(req.body.pp) : 25;
   if (!filtersActive(filters) && !sample) return res.json({ kind, filters, result: null, sample });
   const result = kind === 'people' ? (live ? await searchPeople(apollo, filters, page, pp) : samplePeople(filters, page, pp)) : (live ? await searchCompanies(apollo, filters, page, pp) : sampleCompanies(filters, page, pp));
-  if (kind === 'people') await annotateInLaunchpad(req.piq!.client, result.rows as Person[], live);
-  const icp = await annotateTargeting(req.piq!.client, result.rows, kind, apollo, live);
+  const [, icp] = await Promise.all([
+    kind === 'people' ? annotateInLaunchpad(req.piq!.client, result.rows as Person[], live) : null,
+    annotateTargeting(req.piq!.client, result.rows, kind, apollo, live),
+  ]);
   if (live && page === 1) logActivity(req.piq!.client.slug, { kind: 'search', title: filtersSummary(filters, kind), detail: `${result.total.toLocaleString('en-US')} ${kind} found (${req.body?.mode === 'industries' ? 'Industries' : kind === 'people' ? 'People' : 'Companies'} tab)`, by: 'client', ok: true, n: result.total });
   res.json({ kind, filters, result, icp, sample });
 }));
 
-/* ---- one company by domain ---- */
+/* ---- one company, by its website or by its name ---- */
 
 api.post('/lookup', requireClient('research:lookup'), wrap(async (req, res) => {
   const { client, live, apollo, sample } = req.piq!;
-  const domain = normDomain(String(req.body?.domain || ''));
-  if (!domain) return res.status(400).json({ error: 'Enter the company domain, such as flowserve.com.' });
-  if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(domain)) return res.status(400).json({ error: `"${domain}" is not a domain.` });
+  const typed = String(req.body?.domain ?? req.body?.q ?? '').trim().slice(0, 120);
+  if (!typed) return res.status(400).json({ error: 'Enter the company name or its website, such as flowserve.com.' });
+  let domain = looksLikeDomain(typed) ? normDomain(typed) : '';
+  let others: Org[] = [];
+  if (!domain) {
+    // A name: find the companies it could be. One clear answer goes straight through; several are offered to choose from.
+    const found = live ? (await searchCompanies(apollo, { ...emptyFilters(), oname: typed }, 1, 8)).rows : sampleNamed(typed);
+    const pick = pickByName(found, typed);
+    if ('candidates' in pick) {
+      if (!pick.candidates.length) return res.status(404).json({ error: `No company named "${typed}" was found. Try its website address instead, such as flowserve.com.` });
+      return res.json({ candidates: pick.candidates, q: typed, sample });
+    }
+    domain = pick.domain;
+    others = pick.others;
+  }
   const titles = cleanFilters({ titles: req.body?.titles }).titles;
   const sen = cleanFilters({ sen: req.body?.sen }).sen;
   const pp = Math.max(1, Math.min(50, Number(req.body?.pp) || 10));
@@ -216,7 +264,7 @@ api.post('/lookup', requireClient('research:lookup'), wrap(async (req, res) => {
   await annotateInLaunchpad(client, people, live);
   if (live) logActivity(client.slug, { kind: 'lookup', title: domain, detail: `${org.name || domain}: ${people.length} people found`, by: 'client', ok: true, n: people.length });
   const [note, message] = draftNote(client.profile, org, people, imports);
-  res.json({ org, people, note, message, imports, sample });
+  res.json({ org, people, note, message, imports, sample, others });
 }));
 
 /* ---- local businesses from Google Maps ---- */

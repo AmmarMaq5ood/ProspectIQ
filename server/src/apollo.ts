@@ -37,12 +37,22 @@ async function call(a: ApolloCtx, method: 'GET' | 'POST', ep: string, body: Reco
   const quiet = ep === '/usage_stats/api_usage_stats';
   const url = method === 'GET' ? `${BASE}${ep}?${new URLSearchParams(body as Record<string, string>)}` : `${BASE}${ep}`;
   const t0 = Date.now();
+  const send = () => fetch(url, { method, headers: { 'x-api-key': a.key, accept: 'application/json', 'content-type': 'application/json', 'cache-control': 'no-cache' }, body: method === 'POST' ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(40000) });
   let res: Response;
   try {
-    res = await fetch(url, { method, headers: { 'x-api-key': a.key, accept: 'application/json', 'content-type': 'application/json', 'cache-control': 'no-cache' }, body: method === 'POST' ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(40000) });
-  } catch (e) {
-    if (!quiet) usageLog(a.slug, a.ctx, { p: 'apollo', ep, ok: 0, ms: Date.now() - t0, err: String(e) });
-    throw new ApolloError(`Research service ${ep}: ${(e as Error).message}`);
+    res = await send();
+  } catch (first) {
+    // The connection dropped before any answer. Searches and company look-ups are free and safe to send again, once;
+    // a person lookup is not repeated, since the first one may have gone through and been charged.
+    const again = ep !== '/people/match' && (first as Error).name !== 'TimeoutError';
+    try {
+      if (!again) throw first;
+      await new Promise((r) => setTimeout(r, 500));
+      res = await send();
+    } catch (e) {
+      if (!quiet) usageLog(a.slug, a.ctx, { p: 'apollo', ep, ok: 0, ms: Date.now() - t0, err: `${ep}: ${String(e)}` });
+      throw new ApolloError('The research database did not answer. Please try again in a moment.');
+    }
   }
   const ms = Date.now() - t0;
   const json = (await res.json().catch(() => ({}))) as Record<string, any>;
@@ -50,7 +60,7 @@ async function call(a: ApolloCtx, method: 'GET' | 'POST', ep: string, body: Reco
     let msg = json?.error_details?.message || json?.error || json?.message || `HTTP ${res.status}`;
     if (res.status === 429) msg = 'rate limit reached, try again in a minute';
     if (!quiet) usageLog(a.slug, a.ctx, { p: 'apollo', ep, ok: 0, ms, err: String(msg) });
-    throw new ApolloError(`Research service ${ep}: ${msg}`);
+    throw new ApolloError(`The research database could not run this (${msg}).`);
   }
   if (!quiet) {
     let credit = 0;

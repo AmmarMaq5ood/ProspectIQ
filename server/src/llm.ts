@@ -2,7 +2,7 @@ import OpenAI from 'openai';
 import { DEP_CODES, EMPLOYEE_RANGES, SENIORITY } from './apollo.js';
 import { cached } from './store.js';
 import { usageLog, priceFor } from './usage.js';
-import { blankIntent, cleanIntent, intentSummary, rulesIntent } from './rules.js';
+import { blankIntent, cleanIntent, intentSummary, rulesIntent, widenKeywords } from './rules.js';
 import type { Intent, Kind, Org, Person, Profile, Targeting } from './types.js';
 import { PRIORITY, matchText, summaryRule, targetingActive } from './icp.js';
 
@@ -69,14 +69,14 @@ export async function parseIntent(c: LlmCtx, profile: Profile, q: string): Promi
 Rules:
 - kind: "people" when the request is about buyers, contacts, roles, decision makers or leads; "companies" when it is about firms, manufacturers, suppliers, markets or whole industries with no role mentioned.
 - titles: job titles as commonly written ("purchasing manager", "director of supply chain"). Include obvious synonyms (purchasing ↔ procurement ↔ sourcing ↔ buyer). Empty when no role is implied.
-- seniorities and departments: only codes from the enums, only when implied.
+- seniorities and departments: only codes from the enums, only when implied. Leave departments empty whenever titles are given: the title already says it, and a title and a department together match almost nobody.
 - person_locations: where the person is; company_locations: where the company is headquartered. Use "City, State" for US cities, "State, US" for US states, or a country name. Put a plain "in Texas" under person_locations for people searches and under company_locations for company searches.
-- industry_keywords: short noun phrases describing what the company makes or does.
+- industry_keywords: matched literally against the tags on a company's profile, so write them the way companies are tagged, not the way the request is worded. Give 2 to 4 short noun phrases, most specific first: the product or trade itself, without words like manufacturers, makers, companies, distributors or suppliers ("valve manufacturers" → "valves", "industrial valves", "valve manufacturing"; "electrical distributors" → "electrical distribution", "electrical supplies", "electrical wholesale"). For manufacturers and makers keep to what is made and include the "<product> manufacturing" form; do not add service words such as systems, services, solutions, installation or contractors, which bring in installers and service firms. When the place is a country where another language is spoken, add the usual term in that language too ("materiales eléctricos").
 - employee_ranges: only codes from the enum, covering the size described ("50 to 500 employees" → "51,100", "101,200", "201,500"; "small" → up to 200; "mid-size" → 201 to 2,000; "large" → 2,001 and up).
 - revenue_min / revenue_max in whole US dollars, 0 when not mentioned.
 - summary: one short sentence restating what will be searched.
 Return only the JSON.`;
-  const raw = await cached<Partial<Intent>>(c.slug, `intent|${c.model}|${q.trim().toLowerCase()}`, 86400, () => json<Partial<Intent>>(c, 'intent', system, `Request: ${q.trim()}`, 'intent', intentSchema()));
+  const raw = await cached<Partial<Intent>>(c.slug, `intent3|${c.model}|${q.trim().toLowerCase()}`, 86400, () => json<Partial<Intent>>(c, 'intent', system, `Request: ${q.trim()}`, 'intent', intentSchema()));
   const i = cleanIntent({ ...blankIntent(), ...raw });
   if (!i.summary) i.summary = intentSummary(i);
   return i;
@@ -84,14 +84,17 @@ Return only the JSON.`;
 
 /** Intent: GPT when there is a key and we are live, the rules otherwise; GPT failure falls back to the rules with the error noted. */
 export async function askIntent(c: LlmCtx, profile: Profile, q: string, useGpt: boolean): Promise<Intent> {
+  // Whoever read the request, the industry words go out in the forms the research database matches.
+  // A title already says the department; both together match almost nobody (measured: 245 buyers with the titles alone, 6 with a department added).
+  const tagged = (i: Intent): Intent => ({ ...i, industry_keywords: widenKeywords(i.industry_keywords), departments: i.titles.length ? [] : i.departments });
   if (useGpt && c.key) {
     try {
-      return { ...(await parseIntent(c, profile, q)), source: 'gpt' };
+      return { ...tagged(await parseIntent(c, profile, q)), source: 'gpt' };
     } catch (e) {
-      return { ...rulesIntent(q, profile), source: 'rules', error: (e as Error).message };
+      return { ...tagged(rulesIntent(q, profile)), source: 'rules', error: (e as Error).message };
     }
   }
-  return { ...rulesIntent(q, profile), source: 'rules' };
+  return { ...tagged(rulesIntent(q, profile)), source: 'rules' };
 }
 
 export function fitRule(row: Person | Org, intent: Intent, kind: Kind): string {
@@ -99,7 +102,7 @@ export function fitRule(row: Person | Org, intent: Intent, kind: Kind): string {
   if (kind === 'people') {
     const p = row as Person;
     const title = p.title.toLowerCase();
-    for (const t of intent.titles) { const w = t.toLowerCase().split(' '); if (title.includes(t.toLowerCase()) || (w.length > 1 && title.includes(w[0]))) { bits.push(`holds a ${t.toLowerCase()} role`); break; } }
+    for (const t of intent.titles) { const w = t.toLowerCase().split(' '); if (title.includes(t.toLowerCase()) || (w.length > 1 && title.includes(w[0]))) { bits.push(`holds ${/^[aeiou]/i.test(t) ? 'an' : 'a'} ${t.toLowerCase()} role`); break; } }
     if (!bits.length && title) bits.push(`title "${p.title}" is on the buying side`);
     if (intent.industry_keywords.length && p.company) bits.push(`${p.company} sits in the ${intent.industry_keywords[0]} space you asked for`);
     if (p.has_email) bits.push('work email on file');

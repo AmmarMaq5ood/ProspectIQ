@@ -1,5 +1,5 @@
 import { DEP_CODES, EMPLOYEE_RANGES, SENIORITY } from './apollo.js';
-import type { Filters, Intent, Profile } from './types.js';
+import type { Filters, Intent, Kind, Profile } from './types.js';
 
 /**
  * The rule-based request parser: used when a client has no GPT key, in
@@ -98,6 +98,129 @@ export function cleanIntent(raw: Partial<Intent>): Intent {
   i.revenue_min = Math.max(0, Number(i.revenue_min || 0)); i.revenue_max = Math.max(0, Number(i.revenue_max || 0));
   i.technologies = list(i.technologies); i.keywords = String(i.keywords || '').trim(); i.summary = String(i.summary || '').trim();
   return i;
+}
+
+/** People-and-up seniorities used when a company search is turned into the people who work there. */
+export const BUYER_SENIORITIES = ['owner', 'c_suite', 'vp', 'head', 'director', 'manager'];
+
+/**
+ * The same request seen the other way round. Companies → the people who buy
+ * there (the titles in the request, else the client's usual titles, else
+ * managers and up); people → the companies they work at (the person's
+ * location becomes the headquarters). Everything about the company stays.
+ */
+export function switchKind(i: Intent, to: Kind, profile?: Profile): Intent {
+  if (i.kind === to) return i;
+  const o: Intent = { ...i, kind: to };
+  if (to === 'people') {
+    const usual = (profile?.default_titles || []).map((t) => t.trim()).filter(Boolean).slice(0, 8);
+    o.titles = i.titles.length ? i.titles : usual;
+    o.seniorities = i.seniorities.length ? i.seniorities : o.titles.length ? [] : BUYER_SENIORITIES;
+  } else {
+    o.titles = [];
+    o.seniorities = [];
+    o.departments = [];
+    o.company_locations = [...i.company_locations, ...i.person_locations];
+    o.person_locations = [];
+  }
+  o.summary = intentSummary(o);
+  return cleanIntent(o);
+}
+
+const MAKER = /\s+(manufacturers?|manufacturing|makers?|producers?|fabricators?|oems?)$/i;
+const SELLER = /\s+(distributors?|distribution|wholesalers?|wholesale|dealers?|resellers?|stockists?)$/i;
+const FILLER = /\s+(companies|company|firms?|businesses|business|industry|industries|sector|market|suppliers?|vendors?)$/i;
+/** Words with no everyday plural: "equipment", "machinery", "packaging", "software", "electronics", "steel". */
+const NO_PLURAL = /(ment|ery|ing|ware|ics|ss|ion|ure|steel|gas|oil|energy|hvac|food|water|glass|plastic|rubber|paper|wood|metal|iron|aluminum|aluminium|copper|concrete|cement)$/i;
+
+function lastWordForms(phrase: string): string[] {
+  const words = phrase.split(' ');
+  const last = words[words.length - 1];
+  const head = words.slice(0, -1).join(' ');
+  const join = (w: string) => (head ? `${head} ${w}` : w);
+  if (last.length < 3 || NO_PLURAL.test(last)) return [phrase];
+  if (/[^s]s$/i.test(last)) return [phrase, join(last.replace(/(ches|shes|xes|ses)$/i, (m) => m.slice(0, -2)).replace(/ies$/i, 'y').replace(/s$/i, ''))];
+  return [phrase, join(/(ch|sh|x)$/i.test(last) ? `${last}es` : /[^aeiou]y$/i.test(last) ? `${last.slice(0, -1)}ies` : `${last}s`)];
+}
+
+/**
+ * The research database matches industry words literally against the tags a
+ * company carries, so "valve manufacturers" finds nothing where "valves"
+ * finds hundreds, and "electrical distributors" misses the companies tagged
+ * "electrical distribution". Each phrase is kept and joined by the forms
+ * companies are actually tagged with (any one of them matches).
+ * Measured on 18 Nov 2026: purchasing managers in Texas at "valve
+ * manufacturers" 0, at "valves" 194; Costa Rica "electrical distributors" 0,
+ * "electrical distribution" 11; US "fire protection equipment manufacturing"
+ * 30, "fire protection equipment" 264.
+ */
+export function widenKeywords(kws: string[]): string[] {
+  const out: string[] = [];
+  const add = (s: string) => { const v = s.trim().toLowerCase().replace(/\s+/g, ' '); if (v.length > 2 && !out.includes(v)) out.push(v); };
+  for (const raw of kws) {
+    const k = String(raw).trim().replace(/\s+/g, ' ');
+    if (!k) continue;
+    let m: RegExpMatchArray | null;
+    if ((m = k.match(MAKER)) && m.index) {
+      const base = k.slice(0, m.index).trim();
+      for (const f of lastWordForms(base)) add(f);
+      add(`${lastWordForms(base).find((f) => !/s$/i.test(f)) || base} manufacturing`);
+      add(k);
+    } else if ((m = k.match(SELLER)) && m.index) {
+      const base = k.slice(0, m.index).trim();
+      add(`${base} distribution`); add(`${base} supplies`); add(`${base} wholesale`); add(`${base} distributor`);
+      add(k);
+    } else if ((m = k.match(FILLER)) && m.index) {
+      for (const f of lastWordForms(k.slice(0, m.index).trim())) add(f);
+    } else {
+      add(k);
+    }
+  }
+  return out.slice(0, 8);
+}
+
+const widerPlace = (l: string): string => {
+  const parts = l.split(',').map((s) => s.trim()).filter(Boolean);
+  if (parts.length < 2) return l;
+  const rest = parts.slice(1).join(', ');
+  return /^(us|usa|u\.s\.)$/i.test(rest) ? 'United States' : rest;
+};
+
+/**
+ * What to loosen, in order, when a request matches nothing: the seniority
+ * (the titles already say it), then the company size and revenue, then the
+ * place (a city becomes its state or country). Each step builds on the one
+ * before; the caller stops at the first that finds something.
+ */
+export function relaxSteps(i: Intent): { note: string; intent: Intent }[] {
+  const steps: { note: string; intent: Intent }[] = [];
+  let cur = i;
+  if (cur.departments.length && (cur.titles.length || cur.seniorities.length)) {
+    cur = { ...cur, departments: [] };
+    steps.push({ note: 'the department condition was dropped', intent: cur });
+  }
+  if (cur.titles.length && cur.seniorities.length) {
+    cur = { ...cur, seniorities: [] };
+    steps.push({ note: 'the seniority condition was dropped, since the titles already describe the role', intent: cur });
+  }
+  if (cur.employee_ranges.length || cur.revenue_min || cur.revenue_max) {
+    cur = { ...cur, employee_ranges: [], revenue_min: 0, revenue_max: 0 };
+    steps.push({ note: 'the company size and revenue conditions were dropped', intent: cur });
+  }
+  const pl = [...new Set(cur.person_locations.map(widerPlace))];
+  const cl = [...new Set(cur.company_locations.map(widerPlace))];
+  if (pl.join('|') !== cur.person_locations.join('|') || cl.join('|') !== cur.company_locations.join('|')) {
+    cur = { ...cur, person_locations: pl, company_locations: cl };
+    steps.push({ note: `the place was widened to ${[...new Set([...pl, ...cl])].join(', ')}`, intent: cur });
+  }
+  return steps;
+}
+
+/** "flowserve.com", "https://www.flowserve.com/valves": a web address. "Flowserve", "reliable sprinkler": a name. */
+export function looksLikeDomain(s: string): boolean {
+  const v = String(s).trim();
+  if (!v || /\s/.test(v)) return false;
+  return /^[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$/.test(normDomain(v));
 }
 
 export function normDomain(d: string): string {

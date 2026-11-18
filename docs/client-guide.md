@@ -18,6 +18,20 @@ Scout is the first tab and the quickest way to work.
 
 Under the search box, **Recent searches**, **Daily Leads Finders** and **Templates** give you a head start. Templates are ready-made requests your Launchpad team wrote for your business.
 
+The list of results appears first; the one-line reasons under each result are written a few seconds later and fill in on their own.
+
+If nothing matches every condition in your request, Scout loosens one thing at a time (a department, then the seniority, then the company size, then the place) and tells you in a yellow note what it changed. The **Understood as** chips always show what was actually searched.
+
+## Nothing you searched is lost
+
+Every search stays as you left it while ProspectIQ is open in your browser tab.
+
+- Go to another tab and come back: the results, your ticks, the roles you set and anything you pushed are still there, with no second wait. Each tab reopens on its last search.
+- Click the tab you are already on to start fresh. On Scout, **Recent searches and templates** above the search box does the same.
+- **Refresh**, beside the result count, runs the search again. A result older than a minute or so shows how old it is next to the button.
+- After a push, the people you pushed show as **already a contact** straight away.
+- Kept searches last up to an hour and are cleared when you close the browser tab or sign out.
+
 ![The Scout tab before a search](img/scout-landing.png)
 *The Scout tab before a search. Click a template or type your own request.*
 
@@ -28,7 +42,19 @@ Each person shows first name, a masked surname, title, company and location, plu
 - **Select**: All, With email, New only, or tick by hand.
 - **Hide contacts already in Launchpad** removes those rows so the page shows only new people.
 - The **Role** menu on each person sets the Role field on the contact in Launchpad.
-- Company results show industry, size, headquarters and revenue, with a **people here** link that searches that company's buyers.
+- Company results show industry, size, headquarters and revenue. The **People** button on a company lists the people there in a panel beside the results: tick who you want and push, then close the panel and you are back on your search. **Managers and above** is shown first; **Everyone** shows all who are on file.
+
+### Companies or the people at them
+
+A request about companies ("fire protection equipment manufacturers in the United States") comes back as companies. The switch above the results turns the same request into **People at these companies**: the buyers at those companies, by your usual titles, ready to tick and push. A request about people can be switched to **Their companies** the same way. Switching back and forth is instant once each side has loaded.
+
+![Company results: the switch above them, a People button on each company](img/scout-companies.png)
+*Company results. The switch turns them into the people at those companies; People on a card opens that one company.*
+
+![The people at one company, in a panel beside the search](img/people-panel.png)
+*The People panel. Tick, set roles and push here; closing it returns you to the search exactly as it was.*
+
+Under company results, **Search Google Maps for …** carries the same request to the Local businesses tab. Use it for small and local firms, more so outside the United States, where the research database is thinner.
 
 ![A search with three matches](img/scout-results.png)
 *A search with three matches. The pills under each person show what is on file; the bar at the bottom counts what you ticked and the credits the push can use.*
@@ -50,19 +76,29 @@ After the push, a summary lists every company and contact with a link to each re
 
 These tabs expose every filter: titles, seniority, department, person and company locations, company size, revenue, funding, technologies and email status. Use them when a request needs precision Scout cannot read, or when you arrive from **Edit filters**.
 
-- **People** returns decision-makers. **Companies** returns organisations; tick them and push to create company records without contacts.
+- **People** returns decision-makers. **Companies** returns organisations; tick them and push to create company records without contacts, or press **People** on any row to see and push the people there without leaving the list.
+- Filters you have typed but not searched yet are kept when you visit another tab. **Clear all** empties them.
 - **Industries** shows a size and headquarters breakdown for an industry, with a one-click **find buyers at these companies**.
 
 ## Company lookup
 
-Paste one website address. ProspectIQ returns the company, the people there who match your usual titles, a drafted research note and a connection message. Tick the people you want and push; the first ticked contact gets the note and the deal.
+Type the company's name or its website address. ProspectIQ returns the company, the people there who match your usual titles, a drafted research note and a connection message. Tick the people you want and push; the first ticked contact gets the note and the deal.
+
+- A **name** that fits more than one company shows the candidates with their website, industry, place and size: pick the one you mean. When one company carries exactly the name you typed, it opens directly and the others stay listed under it.
+- A **website address** always finds the exact company, so use it when a name is common or abbreviated.
+
+![A name that fits several companies: each with its website, industry, place and size](img/lookup-choices.png)
+*A name that fits several companies. Pick one and its people come back.*
+
+- The lookup stays as you left it when you change tabs, the note and message you edited included.
 
 ## Local businesses
 
 For hotels, restaurants, clinics, dealers and other local businesses, which the research database describes thinly, this tab searches Google Maps instead. Type what kind of business and where, such as "hotels" in "Miami, FL". Each result shows the category, rating and review count, address, phone and website, twenty a page.
 
 - Tick the businesses you want and **push**: each becomes a company record in Launchpad with its address, rating and website. No credits are spent.
-- The **People** button on a business with a website opens the People tab filtered to that company, so you can find and push the people who buy there in the usual way.
+- The **People** button on a business with a website lists the people there in a panel beside the results, ready to tick and push.
+- The search, the pages you have opened and your ticks stay as you left them when you change tabs.
 - Searches here are free for you. Without a Google Maps key on the account the tab shows sample places.
 - The tab is part of your plan; if you do not see it, ask your agency to switch it on.
 
@@ -117,12 +153,14 @@ Your Launchpad team can switch these tabs on or off for your account.
 - Name the **role** and the **kind of company**: "maintenance managers at paper mills".
 - Add a **place** when it matters: a state, a country, or "in the Midwest".
 - Add **size** or **revenue** to focus: "100 to 1,000 employees", "over $50M revenue".
-- Fewer conditions find more people. If a search comes back empty, drop the size or widen the location first.
+- Say what the company **makes or sells** in plain words. Scout searches the words companies are actually filed under: "valve manufacturers" is searched as valves, industrial valves and valve manufacturing; "electrical distributors" as electrical distribution, electrical supplies and electrical wholesale.
+- Fewer conditions find more people. Scout loosens an empty search on its own; to choose what is loosened yourself, use **Edit filters**.
 - Use the **Not in** idea when needed: "manufacturers in Texas, not Houston".
 
 ## When something looks wrong
 
-- **No results**: the request has too many conditions. Use **Edit filters** to loosen one at a time.
+- **No results**: Scout has already tried without the seniority, the company size and the exact place. Use **Edit filters** to change the industry words or the titles, or **Search Google Maps instead** for local firms.
+- **The research database did not answer**: a connection dropped. Press **Refresh** or search again; nothing was spent.
 - **Everyone on this page is already in Launchpad**: show them with the switch, or go to the next page.
 - **A person has no email pill**: pushing still creates the contact with name, title and LinkedIn; no credit is spent unless an email is found.
 - **A finder found nothing**: it only pushes people who are new to your Launchpad. Widen the saved search or create a second finder for a nearby audience.

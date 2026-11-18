@@ -197,11 +197,11 @@ export function angleFor(profile: Profile, org: Org): { what: string; why: strin
 
 export function draftNote(profile: Profile, org: Org, people: Person[], imports = ''): [string, string] {
   const { what, why } = angleFor(profile, org);
-  const lines: string[] = ['RESEARCH (ProspectIQ + ImportGenius + LinkedIn)'];
+  const lines: string[] = [`RESEARCH (ProspectIQ${imports.trim() ? ' + import records' : ''})`];
   const hq = [org.city, org.state, org.country].filter(Boolean).join(', ');
   lines.push(`- ${org.name}${org.industry ? ' — ' + org.industry : ''}${org.employees ? ', ~' + org.employees.toLocaleString() + ' employees' : ''}${hq ? ', ' + hq : ''}${org.website ? '. ' + org.website : ''}`);
   if (org.description) lines.push('- ' + (org.description.length > 260 ? org.description.slice(0, 257) + '…' : org.description));
-  lines.push('- Imports: ' + (imports.trim() || 'not researched yet (ImportGenius).'));
+  if (imports.trim()) lines.push('- Imports: ' + imports.trim());
   if (people.length) lines.push('- Contacts: ' + people.map((p) => `${p.first} ${p.last}`.trim() + ` (${p.title})`).join('; ') + '.');
   lines.push(`- Angle: ${what}.${why ? ' ' + why : ''}`);
   const first = people[0]?.first || 'there';
@@ -220,7 +220,7 @@ export async function pushProspect(lp: LP, p: { company: { name: string; website
   for (const c of p.contacts) {
     const [id, isNew] = await pushContact(lp, c, p.company.name, biz, { industry: p.company.industry, company_size: p.company.size, follow_up_cadence: 'two weeks' });
     ids.push(id);
-    out.contacts.push({ name: `${c.first} ${c.last}`.trim(), role: c.role || '', id, new: isNew, email: c.email || '', priority: c.icp ? PRIORITY[c.icp.level].priority : undefined, icp: c.icp?.level, email_source: c.email ? c.email_source || 'research' : undefined, email_verified: c.email_source === 'waterfall' ? !!c.email_verified : undefined });
+    out.contacts.push({ name: `${c.first} ${c.last}`.trim(), role: c.role || '', id, rid: c.id, new: isNew, email: c.email || '', priority: c.icp ? PRIORITY[c.icp.level].priority : undefined, icp: c.icp?.level, email_source: c.email ? c.email_source || 'research' : undefined, email_verified: c.email_source === 'waterfall' ? !!c.email_verified : undefined });
     log.push(`Contact: ${c.first} ${c.last} (${c.role}) ${isNew ? 'created' : 'updated'}`);
   }
   if (ids[0]) {

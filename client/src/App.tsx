@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { Link, Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { ApiError, api, errText, setKey, setSample } from './api';
 import type { Me, Options } from './types';
@@ -12,6 +12,8 @@ import AdminCosts from './pages/AdminCosts';
 import AdminWaterfall from './pages/AdminWaterfall';
 import { ThemeToggle, useAdminTheme } from './components/Theme';
 import { Icon } from './components/Icon';
+import { PeopleAtProvider } from './components/PeopleAt';
+import { keepClear, tabHref, tabRemember } from './keep';
 import Login from './pages/Login';
 import Scout from './pages/Scout';
 import Research from './pages/Research';
@@ -118,9 +120,38 @@ function Shell() {
   const loc = useLocation();
   const busy = useBusy();
   const c = me.client!;
-  const signOut = async () => { await api('/auth/logout', { body: {} }); setKey(''); await reload(); nav('/login'); };
+  const signOut = async () => { await api('/auth/logout', { body: {} }); setKey(''); keepClear(); await reload(); nav('/login'); };
+
+  /* every tab remembers the search it was left on */
+  useEffect(() => { tabRemember(c.slug, loc.pathname, loc.search); }, [c.slug, loc.pathname, loc.search]);
+  /** A tab link: the tab you are on leads to its blank start; any other leads back to where you left it. */
+  const tab = (to: string, icon: string, label: string, minor = false) => {
+    const active = loc.pathname === to;
+    return (
+      <NavLink to={active ? to : tabHref(c.slug, to)} end={to === '/'} state={active ? undefined : { restore: true }} className={({ isActive }) => `${isActive ? 'on' : ''}${minor ? ' minor' : ''}`.trim()} title={minor ? label : undefined} aria-label={label}>
+        <Icon name={icon} /><span className="tl">{label}</span>
+      </NavLink>
+    );
+  };
+
+  /* the tab bar scrolls sideways when the window is narrow: fade the edge that hides more, keep the open tab in view */
+  const bar = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const el = bar.current;
+    if (!el) return;
+    const mark = () => {
+      el.classList.toggle('more-l', el.scrollLeft > 4);
+      el.classList.toggle('more-r', el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+    };
+    el.querySelector('a.on')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    mark();
+    el.addEventListener('scroll', mark, { passive: true });
+    window.addEventListener('resize', mark);
+    return () => { el.removeEventListener('scroll', mark); window.removeEventListener('resize', mark); };
+  }, [loc.pathname]);
+
   return (
-    <>
+    <PeopleAtProvider>
       <TopProgress active={busy.active} />
       <header className="top">
         <div className="ttl">
@@ -134,20 +165,21 @@ function Shell() {
           {me.admin && <button className="btn ghost sm" type="button" onClick={signOut}>Sign out</button>}
         </div>
       </header>
-      <nav className="tabs" aria-label="Search by">
-        <NavLink to="/" end className={on}><Icon name="spark" />Scout</NavLink>
-        <NavLink to="/people" className={on}><Icon name="people" />People</NavLink>
-        <NavLink to="/companies" className={on}><Icon name="building" />Companies</NavLink>
-        <NavLink to="/industries" className={on}><Icon name="chart" />Industries</NavLink>
-        <NavLink to="/lookup" className={on}><Icon name="link" />Company lookup</NavLink>
-        {c.features.local && <NavLink to="/local" className={on}><Icon name="pin" />Local businesses</NavLink>}
-        <NavLink to="/finders" className={on}><Icon name="calendar" />Daily finders</NavLink>
-        {c.features.targeting && <NavLink to="/targeting" className={on}><Icon name="filter" />Targeting</NavLink>}
-        {(c.show_activity || me.admin) && <NavLink to="/activity" className={on}><Icon name="clock" />Activity</NavLink>}
-        {(c.show_usage || me.admin) && <NavLink to="/usage" className={on}><Icon name="chart" />Usage</NavLink>}
+      <nav className="tabs" aria-label="ProspectIQ sections" ref={bar}>
+        {tab('/', 'spark', 'Scout')}
+        {tab('/people', 'people', 'People')}
+        {tab('/companies', 'building', 'Companies')}
+        {tab('/industries', 'chart', 'Industries')}
+        {tab('/lookup', 'link', 'Company lookup')}
+        {c.features.local && tab('/local', 'pin', 'Local businesses')}
+        <span className="tabs-sep" aria-hidden="true" />
+        {tab('/finders', 'calendar', 'Daily finders')}
+        {c.features.targeting && tab('/targeting', 'filter', 'Targeting', true)}
+        {(c.show_activity || me.admin) && tab('/activity', 'clock', 'Activity', true)}
+        {(c.show_usage || me.admin) && tab('/usage', 'list', 'Usage', true)}
       </nav>
       <div className="page" key={loc.pathname}><Outlet /></div>
-    </>
+    </PeopleAtProvider>
   );
 }
 

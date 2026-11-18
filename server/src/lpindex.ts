@@ -36,6 +36,20 @@ export function normCo(s: string): string {
   return s.toLowerCase().replace(/&/g, ' and ').replace(/\b(inc|llc|ltd|limited|corp|corporation|co|company|gmbh|sa|srl|plc|holdings|group|the)\b/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
+/**
+ * A typed company name against the companies it could be. One candidate, or
+ * exactly one whose name is the typed one, is the answer (the rest are kept
+ * as "others" so the visitor can still switch); otherwise they choose.
+ */
+export function pickByName<T extends { name: string; domain: string }>(found: T[], typed: string): { domain: string; others: T[] } | { candidates: T[] } {
+  const usable = found.filter((o) => o.domain);
+  if (!usable.length) return { candidates: [] };
+  const exact = usable.filter((o) => normCo(o.name) === normCo(typed));
+  const one = usable.length === 1 ? usable[0] : exact.length === 1 ? exact[0] : null;
+  if (!one) return { candidates: usable };
+  return { domain: one.domain, others: usable.filter((o) => o !== one) };
+}
+
 /** Does this Launchpad contact look like this (possibly masked) research result? */
 export function matchesPerson(c: LpContact, p: Person): boolean {
   if (p.email && c.email && p.email.toLowerCase() === c.email) return true;

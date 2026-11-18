@@ -118,6 +118,17 @@ export const cap = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 /** The People tab, limited to one company's buyers. */
 export const peopleAtHref = (domain: string) => `/people?domains=${encodeURIComponent(domain)}&sen=${encodeURIComponent('owner|c_suite|vp|head|director|manager')}`;
 
+/** After a push, the rows that became contacts show as already in Launchpad, without searching again. */
+export function markPushedRows<T extends { id: string }>(rows: T[], pushed: { results: { contacts: { rid?: string; id: string; name: string }[] }[] }): T[] {
+  const done = new Map<string, { id: string; name: string }>();
+  for (const r of pushed.results) for (const c of r.contacts) if (c.rid && c.id) done.set(c.rid, { id: c.id, name: c.name });
+  if (!done.size) return rows;
+  return rows.map((r) => (done.has(r.id) ? { ...r, in_lp: done.get(r.id) } : r));
+}
+
+/** The Local businesses tab, searching for a kind of business in a place. */
+export const localHref = (what: string, where: string) => `/local?what=${encodeURIComponent(what)}${where ? `&where=${encodeURIComponent(where)}` : ''}`;
+
 /** The contact's page inside Launchpad (for "already a contact"). */
 export const lpContactHref = (c: { launchpad_app: string; location_id: string }, id: string) => (c.launchpad_app && c.location_id && id ? `${c.launchpad_app.replace(/\/$/, '')}/v2/location/${encodeURIComponent(c.location_id)}/contacts/detail/${encodeURIComponent(id)}` : '');
 

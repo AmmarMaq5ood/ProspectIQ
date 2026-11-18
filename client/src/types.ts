@@ -203,8 +203,14 @@ export interface AskResult {
   intent: Intent;
   filters: Filters;
   kind: Kind;
+  /** How the request was first read; differs from `kind` when the view was switched (companies shown as their people, or the reverse). */
+  read_kind?: Kind;
   result: SearchResult<Person | Org>;
   fits: Record<string, string>;
+  /** The written fit lines are still to come (asked for after the results are shown). */
+  fits_pending?: boolean;
+  /** What was loosened because nothing matched every condition. */
+  widened?: string[];
   icp?: Record<string, IcpMatch>;
   warnings: string[];
   sample: boolean;
@@ -212,7 +218,8 @@ export interface AskResult {
 
 export interface PushResult {
   company: { name: string; id: string };
-  contacts: { name: string; role: string; id: string; new: boolean; email: string; email_source?: 'research' | 'waterfall'; email_verified?: boolean; priority?: string; icp?: string }[];
+  /** `rid`: the research id of the row this contact came from. */
+  contacts: { name: string; role: string; id: string; rid?: string; new: boolean; email: string; email_source?: 'research' | 'waterfall'; email_verified?: boolean; priority?: string; icp?: string }[];
   note_added: boolean;
   opportunity: { id: string; name: string; created: boolean };
   log: string[];

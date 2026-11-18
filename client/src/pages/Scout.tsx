@@ -1,13 +1,19 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ago, api, cap, errText, fullName, hq, hue, initials, money, nf, outOfCredits, peopleAtHref, todayIn } from '../api';
+import { useLocation, useNavigate, useNavigationType, useSearchParams } from 'react-router-dom';
+import { ago, api, cap, errText, fullName, hq, hue, initials, localHref, markPushedRows, money, nf, outOfCredits, todayIn } from '../api';
 import { useApp } from '../App';
 import { useBusy } from '../components/Busy';
 import { FindersList } from '../components/FindersList';
 import { Icon } from '../components/Icon';
-import { CardHead, Criteria, EmptyState, Errors, Fold, Help, IcpPill, InLp, LpFilter, Notice, Pager, PerPage, PushCount, PushedCompanies, PushedPeople, ResultsHead, SelectBar, type CritGroup } from '../components/ui';
+import { usePeopleAt } from '../components/PeopleAt';
+import { CardHead, Criteria, EmptyState, Errors, Fold, Help, IcpPill, InLp, Kept, LpFilter, Notice, Pager, PerPage, PushCount, PushedCompanies, PushedPeople, ResultsHead, SelectBar, ViewSwitch, type CritGroup } from '../components/ui';
+import { keepDrop, keepGet, keepKey, keepPut } from '../keep';
 import { roleFromTitle } from '../roles';
 import type { AskResult, CompaniesPushed, Kind, Org, PeoplePushed, Person, RecentSearch, IcpMatch } from '../types';
+
+type Pushed = { kind: Kind; people?: PeoplePushed; companies?: CompaniesPushed };
+/** One search as it was left: the result, what was ticked on it, what was pushed from it. */
+interface Snap { res: AskResult; picks: string[]; roles: Record<string, string>; hideLp: boolean; pushed: Pushed | null; notice: string[]; scroll?: number }
 
 /** The Scout tab (was "Ask"; renamed so it is not mistaken for Launchpad's built-in Ask AI): plain words in, leads out; tick, push; save as a daily finder. */
 export default function Scout() {
@@ -15,18 +21,29 @@ export default function Scout() {
   const c = me.client!;
   const busy = useBusy();
   const nav = useNavigate();
+  const peopleAt = usePeopleAt();
+  const loc = useLocation();
+  const navType = useNavigationType();
   const [params, setParams] = useSearchParams();
   const [hideLp, setHideLp] = useState(false);
   const q = (params.get('q') || '').trim();
   const page = Math.max(1, Number(params.get('page')) || 1);
   const pp = options.per_page.includes(Number(params.get('pp'))) ? Number(params.get('pp')) : 10;
+  /** "as": the same request shown the other way (companies as their people, or people as their companies). */
+  const as: Kind | '' = params.get('as') === 'people' ? 'people' : params.get('as') === 'companies' ? 'companies' : '';
   const landing = q === '';
+  /** This search, as a key: the same request, page and view always find the same kept result. */
+  const key = keepKey('ask', c.slug, { q: q.toLowerCase(), page, pp, as });
 
   const [text, setText] = useState(q);
   const [res, setRes] = useState<AskResult | null>(null);
+  const [at, setAt] = useState(0);
+  const [nonce, setNonce] = useState(0);
+  const force = useRef(false);
+  const loaded = useRef('');
   const [err, setErr] = useState('');
   const [notice, setNotice] = useState<string[]>([]);
-  const [pushed, setPushed] = useState<{ kind: Kind; people?: PeoplePushed; companies?: CompaniesPushed } | null>(null);
+  const [pushed, setPushed] = useState<Pushed | null>(null);
   const [picks, setPicks] = useState<Set<string>>(new Set());
   const [roles, setRoles] = useState<Record<string, string>>({});
   const [recent, setRecent] = useState<RecentSearch[]>([]);
@@ -39,18 +56,56 @@ export default function Scout() {
   const aiOn = c.has_openai && !me.sample;
 
   useEffect(() => {
-    setText(q); setPushed(null); setNotice([]); setErr(''); setPicks(new Set()); setRoles({});
+    setText(q); setErr('');
     if (!q) {
-      setRes(null);
+      loaded.current = '';
+      setRes(null); setPushed(null); setNotice([]); setPicks(new Set()); setRoles({});
       api<{ recent: RecentSearch[] }>('/recent').then((r) => setRecent(r.recent)).catch((e) => setErr(`Could not load recent searches: ${errText(e)}`));
       return;
     }
+    // A search already run in this browser tab comes back as it was left: no second wait, ticks and all.
+    const hit = force.current ? null : keepGet<Snap>(key);
+    force.current = false;
+    if (hit) {
+      loaded.current = key;
+      setRes(hit.v.res); setPicks(new Set(hit.v.picks)); setRoles(hit.v.roles); setHideLp(hit.v.hideLp); setPushed(hit.v.pushed); setNotice(hit.v.notice); setAt(hit.t);
+      const back = navType === 'POP' || !!(loc.state as { restore?: boolean } | null)?.restore;
+      if (back && hit.v.scroll) { const y = hit.v.scroll; requestAnimationFrame(() => window.scrollTo(0, y)); }
+      return;
+    }
+    setPushed(null); setNotice([]); setPicks(new Set()); setRoles({});
     let live = true;
-    busy.run('Searching the research database… hang tight', () => api<AskResult>('/ask', { body: { q, page, pp } }))
-      .then((r) => { if (live) setRes(r); })
+    busy.run('Searching the research database… hang tight', () => api<AskResult>('/ask', { body: { q, page, pp, lazy: true, ...(as ? { as } : {}) } }))
+      .then((r) => { if (live) { loaded.current = key; setRes(r); setAt(Date.now()); } })
       .catch((e) => { if (live) { setErr(errText(e)); setRes(null); } });
     return () => { live = false; };
-  }, [q, page, pp]);
+  }, [key, nonce]);
+
+  /* keep the search as it stands, every time something on it changes */
+  useEffect(() => {
+    if (!res || !q || loaded.current !== key) return;
+    keepPut<Snap>(key, { res, picks: [...picks], roles, hideLp, pushed, notice, scroll: keepGet<Snap>(key)?.v.scroll }, at || Date.now());
+  }, [res, picks, roles, hideLp, pushed, notice, at]);
+
+  /* and where the page was scrolled to, for the way back */
+  useEffect(() => () => {
+    const snap = keepGet<Snap>(key);
+    if (snap) keepPut<Snap>(key, { ...snap.v, scroll: window.scrollY }, snap.t);
+  }, [key]);
+
+  /* the written fit lines arrive after the results: they take the longest, and nobody should wait on them to see the list */
+  const fitting = useRef('');
+  useEffect(() => {
+    if (!res?.fits_pending || loaded.current !== key || fitting.current === key) return;
+    const forKey = key;
+    fitting.current = forKey;
+    api<{ fits: Record<string, string> }>('/fits', { body: { intent: res.intent, kind: res.kind, rows: res.result.rows } })
+      .then((f) => { if (loaded.current === forKey) setRes((x) => (x ? { ...x, fits: { ...x.fits, ...f.fits }, fits_pending: false } : x)); })
+      .catch(() => { if (loaded.current === forKey) setRes((x) => (x ? { ...x, fits_pending: false } : x)); })
+      .finally(() => { if (fitting.current === forKey) fitting.current = ''; });
+  }, [res?.fits_pending, key]);
+
+  const refresh = () => { keepDrop(key); force.current = true; setNonce((n) => n + 1); window.scrollTo({ top: 0 }); };
 
   /* the empty prompt types example requests into its placeholder */
   const inputRef = useRef<HTMLInputElement>(null);
@@ -74,11 +129,21 @@ export default function Scout() {
   }, [landing]);
 
   const go = (nq: string, over: Record<string, string> = {}) => {
-    const p: Record<string, string> = { ...over };
+    const p: Record<string, string> = {};
     if (nq) p.q = nq;
+    for (const [k, v] of Object.entries(over)) if (v) p[k] = v;
     setParams(p);
   };
-  const submit = (e: FormEvent) => { e.preventDefault(); if (text.trim()) go(text.trim()); };
+  /** Same request, something changed (page, page size, view): the rest of the address stays. */
+  const stay = (over: Record<string, string>) => go(q, { ...(pp !== 10 ? { pp: String(pp) } : {}), ...(as ? { as } : {}), ...over });
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    const t = text.trim();
+    if (!t) return;
+    // Pressing the arrow on the search that is already showing runs it again.
+    if (t.toLowerCase() === q.toLowerCase() && !landing) { refresh(); return; }
+    go(t);
+  };
   const rephrase = () => { const el = inputRef.current; if (el) { el.focus(); el.select(); window.scrollTo({ top: 0, behavior: 'smooth' }); } };
 
   const allRows = res?.result.rows || [];
@@ -104,6 +169,7 @@ export default function Scout() {
       if (isPeople) {
         const r = await busy.run('Pushing to Launchpad… looking each person up, then creating the records', () => api<PeoplePushed>('/push/people', { body: { picks: [...picks], people: rows, roles } }));
         setPushed({ kind, people: r });
+        setRes((x) => (x ? { ...x, result: { ...x.result, rows: markPushedRows(x.result.rows, r) } } : x));
       } else {
         const r = await busy.run('Pushing to Launchpad… creating the company records', () => api<CompaniesPushed>('/push/companies', { body: { picks: [...picks], companies: rows } }));
         setPushed({ kind, companies: r });
@@ -155,6 +221,9 @@ export default function Scout() {
     groups.push({ label: 'Uses', facet: 'tech', values: i.technologies });
     groups.push({ label: 'Keywords', facet: 'other', values: i.keywords ? [i.keywords] : [] });
   }
+  /* the same request as a Google Maps search: the kind of business, and the place */
+  const mapsWhat = res ? (res.intent.industry_keywords[0] || res.intent.company_name || res.intent.keywords || '') : '';
+  const mapsWhere = res ? (res.intent.company_locations[0] || res.intent.person_locations[0] || '') : '';
   const refineHref = res ? `/${kind}?${filtersToQuery(res.filters)}` : '';
   const editBtn = <a className="btn secondary sm" onClick={() => nav(refineHref)}><Icon name="filter" />Edit filters</a>;
 
@@ -223,17 +292,35 @@ export default function Scout() {
           </section>
         </>
       ) : (
-        <section className="ask-hero compact" aria-label="Scout for leads">{pill(false)}</section>
+        <section className="ask-hero compact" aria-label="Scout for leads">
+          <a className="ask-back" onClick={() => go('')}><Icon name="chevron" />Recent searches and templates</a>
+          {pill(false)}
+        </section>
       )}
 
       {res && (
         <>
           <div className="card">
             <ResultsHead total={res.result.total} noun={isPeople ? 'people' : 'companies'} summary={res.intent.summary}>
+              <Kept at={at} onRefresh={refresh} />
               {editBtn}
-              <PerPage value={pp} options={options.per_page} onChange={(n) => go(q, { pp: String(n) })} />
+              <PerPage value={pp} options={options.per_page} onChange={(n) => stay({ pp: n === 10 ? '' : String(n), page: '' })} />
             </ResultsHead>
+            <div className="viewrow">
+              <ViewSwitch value={kind} onChange={(v) => stay({ as: v === (res.read_kind || kind) ? '' : v, page: '' })} options={(res.read_kind || kind) === 'companies'
+                ? [{ value: 'companies', label: 'Companies', icon: 'building' }, { value: 'people', label: 'People at these companies', icon: 'people' }]
+                : [{ value: 'people', label: 'People', icon: 'people' }, { value: 'companies', label: 'Their companies', icon: 'building' }]} />
+              <span className="hint">{isPeople
+                ? ((res.read_kind || kind) === 'companies' ? 'The people who buy at the companies you asked for. Tick them and push.' : 'Switch to see the companies these people work at.')
+                : 'Switch to see the people who buy at these companies, or open People on any one of them.'}</span>
+            </div>
+            {!!res.widened?.length && (
+              <p className="widened" role="status"><Icon name="spark" /><span><b>Nothing matched every condition, so Scout widened the search:</b> {res.widened.join('; ')}. The conditions below are the ones that were searched.</span></p>
+            )}
             <Criteria groups={groups} />
+            {!isPeople && c.features.local && allRows.length > 0 && mapsWhat && (
+              <p className="hint also-maps"><Icon name="pin" /><span>Small local firms are often missing from the research database. <a onClick={() => nav(localHref(mapsWhat, mapsWhere))}>Search Google Maps for {mapsWhat}{mapsWhere ? ` in ${mapsWhere}` : ''}</a></span></p>
+            )}
             {rows.length ? (
               <>
                 <SelectBar onPick={pick} icp={anyIcp} email={isPeople} newOnly={isPeople && nLp > 0} nLp={nLp} hide={hideLp} onHide={setHideLp} />
@@ -241,20 +328,23 @@ export default function Scout() {
                   {rows.map((r) => (
                     <label className={`lead${inLp(r) ? ' dim' : ''}${rank(r.id) === 2 ? ' hot' : rank(r.id) === 1 ? ' high' : ''}`} key={r.id}>
                       <input type="checkbox" checked={picks.has(r.id)} onChange={(e) => toggle(r.id, e.target.checked)} />
-                      {isPeople ? <PersonCard p={r as Person} roles={c.profile.roles} role={roles[r.id]} onRole={(v) => setRoles((m) => ({ ...m, [r.id]: v }))} fit={res.fits[r.id] || ''} m={icp[r.id]} /> : <OrgCard o={r as Org} fit={res.fits[r.id] || ''} m={icp[r.id]} onPeople={() => nav(peopleAtHref((r as Org).domain))} />}
+                      {isPeople ? <PersonCard p={r as Person} roles={c.profile.roles} role={roles[r.id]} onRole={(v) => setRoles((m) => ({ ...m, [r.id]: v }))} fit={res.fits[r.id] || ''} m={icp[r.id]} /> : <OrgCard o={r as Org} fit={res.fits[r.id] || ''} m={icp[r.id]} onPeople={() => peopleAt({ name: (r as Org).name, domain: (r as Org).domain, id: r.id })} />}
                     </label>
                   ))}
                 </div>
-                <Pager res={res.result} onPage={(p) => go(q, { page: String(p), pp: String(pp) })} />
+                <Pager res={res.result} onPage={(p) => { stay({ page: p > 1 ? String(p) : '' }); window.scrollTo({ top: 0 }); }} />
               </>
             ) : allRows.length ? (
               <EmptyState icon="people" title="Everyone on this page is already in Launchpad" text="They are hidden by the switch below. Show them, or move to the next page.">
                 <LpFilter n={nLp} hide={hideLp} onChange={setHideLp} />
               </EmptyState>
             ) : (
-              <EmptyState icon="search" title="No one matched all of these conditions" text="The more conditions a request has, the fewer people fit them all. Try dropping the company size or widening the location, or adjust each condition in the filters.">
+              <EmptyState icon="search" title={isPeople ? 'No one matched all of these conditions' : 'No company matched all of these conditions'} text={isPeople
+                ? 'The more conditions a request has, the fewer people fit them all. Try dropping the company size or widening the location, or adjust each condition in the filters.'
+                : 'The research database is thin on small and local firms, more so outside the United States. Widen the location or the industry words, or look for local businesses on Google Maps.'}>
                 {editBtn}
                 <a className="btn ghost sm" onClick={rephrase}><Icon name="spark" />Rephrase the request</a>
+                {c.features.local && mapsWhat && <a className="btn ghost sm" onClick={() => nav(localHref(mapsWhat, mapsWhere))}><Icon name="pin" />Search Google Maps instead</a>}
               </EmptyState>
             )}
           </div>
@@ -332,13 +422,17 @@ function OrgCard({ o, fit, onPeople, m }: { o: Org; fit: string; onPeople: () =>
     <>
       <span className="av co">{o.logo ? <img src={o.logo} alt="" loading="lazy" /> : <Icon name="building" />}</span>
       <div className="lead-body">
-        <div className="nm">{o.name}</div>
-        <div className="st">{bits.join(' · ')}</div>
+        <div className="lead-top">
+          <div>
+            <div className="nm">{o.name}</div>
+            <div className="st">{bits.join(' · ')}</div>
+          </div>
+          <button type="button" className="btn secondary sm" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onPeople(); }} title={`See the people at ${o.name}`}><Icon name="people" />People</button>
+        </div>
         <div className="pills">
           <IcpPill m={m} />
           {o.website && <a className="pill" href={o.website} target="_blank" rel="noopener" onClick={(e) => e.stopPropagation()}>web</a>}
           {o.linkedin && <a className="pill" href={o.linkedin} target="_blank" rel="noopener" onClick={(e) => e.stopPropagation()}>LinkedIn</a>}
-          <a className="pill blue" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onPeople(); }}>people here</a>
         </div>
         {fit && <p className="fit"><Icon name="spark" /><span>{fit}</span></p>}
       </div>

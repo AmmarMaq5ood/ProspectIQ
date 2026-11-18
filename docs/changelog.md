@@ -2,6 +2,18 @@
 
 *Changes to ProspectIQ, newest first. One entry per shipped feature.*
 
+## 18 November 2026
+
+- **Nothing you searched is lost**: every search on Scout, People, Companies, Industries, Company lookup and Local businesses stays as it was left while ProspectIQ is open: the results, the ticks, the roles, the edited research note, what was pushed. Each tab reopens on its last search, the browser's back button and a reload restore it without searching again, and **Refresh** runs it again on request. Clicking the open tab starts fresh. Company lookup and Local businesses now carry their search in the page address like the other tabs.
+- **People at a company, in place**: every company on Scout, Companies, Industries and Local businesses has a **People** button that lists the people there in a side panel, with selection, roles and Push to Launchpad inside it. It replaces the small "people here" link that left the search.
+- **Companies or their people, one switch**: a company request on Scout can be shown as **People at these companies** (the client's usual titles at those same companies) and back, without retyping.
+- **Requests find more**: industry words are searched in the forms companies are filed under, so "valve manufacturers" also searches valves, industrial valves and valve manufacturing, and "electrical distributors" searches electrical distribution, supplies and wholesale. A department is no longer added on top of job titles. Measured on the same requests before and after: purchasing managers at valve manufacturers in Texas, 0 to 253; electrical distributors in Costa Rica, 0 to 20; fire protection equipment manufacturers in the United States, 30 to 352.
+- **An empty search is loosened, and says so**: when nothing matches every condition, Scout drops the department, then the seniority, then the company size, then widens the place, stopping at the first that finds results, and lists what it changed.
+- **Results first**: the list appears as soon as the search returns; the written one-line reasons follow a few seconds later. First results now take roughly half as long as before.
+- **Company lookup by name**: a name works as well as a website. Several companies by one name are offered to choose from, each with its website, industry, place and size.
+- **Scout to Google Maps**: company results and empty results link to the same request on the Local businesses tab, for small and local firms the research database is thin on.
+- **Smaller things**: the tab bar stays on one row at any width; result tables fit beside the filters and keep the People button in view when they must scroll; the Search button in the filter rail stays visible; the page no longer scrolls sideways on phones; a dropped connection to the research database is retried once and reported in plain words; filters typed but not yet searched survive a tab change; the research note no longer carries an imports line unless findings were typed; sample mode shows varied companies and titles.
+
 ## 4 November 2026
 
 - **Features per client**: a new Features tab on each client in admin, one card per feature with its switch, what it does, what disappears when it is off and whether the key it needs is set, plus a preview of the client's tab bar. Targeting and Local businesses can now be switched off per client: the tab disappears, the server refuses the requests, and with Targeting off nothing is matched or tagged and finders push everything. The email waterfall, Activity and Usage switches moved here from the Credits and Keys tabs. Every change is written to the client's activity log. Existing clients keep everything they had.

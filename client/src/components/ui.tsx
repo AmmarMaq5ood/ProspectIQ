@@ -1,6 +1,7 @@
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { lpContactHref, nf, peopleAtHref } from '../api';
+import { keptAge } from '../keep';
 import { useApp } from '../App';
 import type { CompaniesPushed, PeoplePushed, Person, SearchResult, IcpMatch } from '../types';
 import { Icon } from './Icon';
@@ -174,6 +175,28 @@ export function ResultsHead({ total, noun, summary, children }: { total: number;
       <div className="n"><b className={total ? '' : 'zero'}><Num value={total} /></b><span className="noun">{noun}</span>{summary && <span className="sum">{summary}</span>}</div>
       {children && <div className="act">{children}</div>}
     </div>
+  );
+}
+
+/** Beside a result that was kept from earlier: how old it is, and the way to run the search again. */
+export function Kept({ at, onRefresh }: { at: number; onRefresh: () => void }) {
+  const [, tick] = useState(0);
+  useEffect(() => { const t = window.setInterval(() => tick((n) => n + 1), 30000); return () => window.clearInterval(t); }, []);
+  const old = at > 0 && Date.now() - at > 90000;
+  return (
+    <span className="kept">
+      {old && <span className="kept-age" title="Kept from your earlier search, so you did not have to wait again">from {keptAge(at)}</span>}
+      <button type="button" className="btn ghost sm" onClick={onRefresh} title="Run this search again for fresh results"><Icon name="refresh" />Refresh</button>
+    </span>
+  );
+}
+
+/** Two ways to see the same request: the companies, or the people who work at them. */
+export function ViewSwitch({ value, options, onChange }: { value: string; options: { value: string; label: string; icon: string }[]; onChange: (v: string) => void }) {
+  return (
+    <span className="seg view-switch" role="group" aria-label="Show results as">
+      {options.map((o) => <button type="button" key={o.value} className={o.value === value ? 'on' : ''} aria-pressed={o.value === value} onClick={() => o.value !== value && onChange(o.value)}><Icon name={o.icon} />{o.label}</button>)}
+    </span>
   );
 }
 

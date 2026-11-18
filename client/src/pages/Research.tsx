@@ -1,17 +1,22 @@
-import { useEffect, useState, type ReactNode } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { api, cap, errText, fullName, hq, money, nf, outOfCredits, peopleAtHref, hue, initials } from '../api';
+import { useEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate, useNavigationType, useSearchParams } from 'react-router-dom';
+import { api, cap, errText, fullName, hq, markPushedRows, money, nf, outOfCredits, hue, initials } from '../api';
 import { useApp } from '../App';
 import { useBusy } from '../components/Busy';
 import { Chips } from '../components/Chips';
 import { Icon } from '../components/Icon';
-import { CardHead, Checks, Errors, Field, Group, Help, IcpPill, InLp, Pager, PerPage, PushCount, PushedCompanies, PushedPeople, Range, ResultsHead, SelectBar, Criteria } from '../components/ui';
+import { usePeopleAt } from '../components/PeopleAt';
+import { CardHead, Checks, Errors, Field, Group, Help, IcpPill, InLp, Kept, Pager, PerPage, PushCount, PushedCompanies, PushedPeople, Range, ResultsHead, SelectBar, Criteria } from '../components/ui';
+import { keepDrop, keepGet, keepKey, keepPut } from '../keep';
 import { roleFromTitle } from '../roles';
 import { filtersToQuery } from './Scout';
 import type { CompaniesPushed, Filters, Org, PeoplePushed, Person, SearchResult, IcpMatch } from '../types';
 import type { CritGroup } from '../components/ui';
 
 type Mode = 'people' | 'companies' | 'industries';
+type Pushed = { people?: PeoplePushed; companies?: CompaniesPushed };
+/** One search as it was left: the result, what was ticked on it, what was pushed from it. */
+interface Snap { res: SearchResult<Person | Org>; icp: Record<string, IcpMatch>; picks: string[]; roles: Record<string, string>; hideLp: boolean; pushed: Pushed | null; scroll?: number }
 
 const KEYS: (keyof Filters)[] = ['titles', 'similar', 'not_titles', 'name', 'kw', 'sen', 'dep', 'ploc', 'pnot', 'oloc', 'onot', 'domains', 'okw', 'oname', 'size', 'rev_min', 'rev_max', 'tech', 'fund', 'founded_min', 'founded_max', 'email', 'oids'];
 
@@ -40,6 +45,9 @@ export default function Research({ mode }: { mode: Mode }) {
   const c = me.client!;
   const busy = useBusy();
   const nav = useNavigate();
+  const peopleAt = usePeopleAt();
+  const loc = useLocation();
+  const navType = useNavigationType();
   const [params, setParams] = useSearchParams();
   const [hideLp, setHideLp] = useState(false);
   const people = mode === 'people';
@@ -70,22 +78,59 @@ export default function Research({ mode }: { mode: Mode }) {
   const pp = options.per_page.includes(Number(params.get('pp'))) ? Number(params.get('pp')) : 25;
 
   const [res, setRes] = useState<SearchResult<Person | Org> | null>(null);
+  const [at, setAt] = useState(0);
+  const [nonce, setNonce] = useState(0);
+  const force = useRef(false);
+  const loaded = useRef('');
 
   const [icp, setIcp] = useState<Record<string, IcpMatch>>({});
   const [err, setErr] = useState('');
-  const [pushed, setPushed] = useState<{ people?: PeoplePushed; companies?: CompaniesPushed } | null>(null);
+  const [pushed, setPushed] = useState<Pushed | null>(null);
   const [picks, setPicks] = useState<Set<string>>(new Set());
   const [roles, setRoles] = useState<Record<string, string>>({});
+  /** This search, as a key: the same filters, page and page size always find the same kept result. */
+  const key = keepKey('search', c.slug, { mode, qs: params.toString() });
 
   useEffect(() => {
-    setPushed(null); setErr(''); setPicks(new Set()); setRoles({});
-    if (!active) { setRes(null); return; }
+    setErr('');
+    if (!active) { loaded.current = ''; setRes(null); setPushed(null); setPicks(new Set()); setRoles({}); return; }
+    // A search already run in this browser tab comes back as it was left: no second wait, ticks and all.
+    const hit = force.current ? null : keepGet<Snap>(key);
+    force.current = false;
+    if (hit) {
+      loaded.current = key;
+      setRes(hit.v.res); setIcp(hit.v.icp); setPicks(new Set(hit.v.picks)); setRoles(hit.v.roles); setHideLp(hit.v.hideLp); setPushed(hit.v.pushed); setAt(hit.t);
+      const back = navType === 'POP' || !!(loc.state as { restore?: boolean } | null)?.restore;
+      if (back && hit.v.scroll) { const y = hit.v.scroll; requestAnimationFrame(() => window.scrollTo(0, y)); }
+      return;
+    }
+    setPushed(null); setPicks(new Set()); setRoles({});
     let live = true;
     busy.run('Searching the research database… hang tight', () => api<{ result: SearchResult<Person | Org> | null; icp?: Record<string, IcpMatch> }>('/search', { body: { kind, mode, filters, page, pp } }))
-      .then((r) => { if (live) { setRes(r.result); setIcp(r.icp || {}); } })
+      .then((r) => { if (live) { loaded.current = key; setRes(r.result); setIcp(r.icp || {}); setAt(Date.now()); } })
       .catch((e) => { if (live) { setErr(errText(e)); setRes(null); } });
     return () => { live = false; };
-  }, [params.toString()]);
+  }, [key, nonce]);
+
+  /* keep the search as it stands, every time something on it changes */
+  useEffect(() => {
+    if (!res || !active || loaded.current !== key) return;
+    keepPut<Snap>(key, { res, icp, picks: [...picks], roles, hideLp, pushed, scroll: keepGet<Snap>(key)?.v.scroll }, at || Date.now());
+  }, [res, icp, picks, roles, hideLp, pushed, at]);
+
+  /* and where the page was scrolled to, for the way back */
+  useEffect(() => () => {
+    const snap = keepGet<Snap>(key);
+    if (snap) keepPut<Snap>(key, { ...snap.v, scroll: window.scrollY }, snap.t);
+  }, [key]);
+
+  const refresh = () => { keepDrop(key); force.current = true; setNonce((n) => n + 1); };
+
+  /* filters typed but not searched yet are kept too, per tab */
+  const draftKey = keepKey('rail', c.slug, mode);
+  const [railN, setRailN] = useState(0);
+  const railStart = active ? filters : (keepGet<Filters>(draftKey)?.v || filters);
+  const clearAll = () => { keepDrop(draftKey); setRailN((n) => n + 1); setParams({}); };
 
   const search = (f: Filters, over: Record<string, string> = {}) => setParams(new URLSearchParams(filtersToQuery({ ...f }) + (Object.keys(over).length ? `&${new URLSearchParams(over)}` : '')));
 
@@ -107,6 +152,7 @@ export default function Research({ mode }: { mode: Mode }) {
       if (people) {
         const r = await busy.run('Pushing to Launchpad… looking each person up, then creating the records', () => api<PeoplePushed>('/push/people', { body: { picks: [...picks], people: rows, roles } }));
         setPushed({ people: r });
+        setRes((x) => (x ? { ...x, rows: markPushedRows(x.rows, r) } : x));
       } else {
         const r = await busy.run('Pushing to Launchpad… creating the company records', () => api<CompaniesPushed>('/push/companies', { body: { picks: [...picks], companies: rows } }));
         setPushed({ companies: r });
@@ -144,7 +190,7 @@ export default function Research({ mode }: { mode: Mode }) {
       {pushed?.companies && <PushedCompanies data={pushed.companies} />}
       <Errors errors={err ? [err] : []} />
       <div className="rs">
-        <Rail key={params.toString()} mode={mode} initial={filters} suggestions={mode === 'industries' ? inds : inds.slice(0, 6)} onSearch={(f) => search(f, { pp: String(pp) })} onClear={() => setParams({})} />
+        <Rail key={`${params.toString()}|${railN}`} mode={mode} initial={railStart} suggestions={mode === 'industries' ? inds : inds.slice(0, 6)} onSearch={(f) => search(f, { pp: String(pp) })} onClear={clearAll} onDraft={(f) => keepPut(draftKey, f)} />
         <section className="results">
           {!res ? (
             <div className="card">
@@ -163,6 +209,7 @@ export default function Research({ mode }: { mode: Mode }) {
               {mode === 'industries' && <IndustrySummary res={res as SearchResult<Org>} okw={filters.okw} />}
               <div className="card">
                 <ResultsHead total={res.total} noun={people ? 'people' : 'companies'} summary={people ? 'surnames are masked until the push' : undefined}>
+                  <Kept at={at} onRefresh={refresh} />
                   <PerPage value={pp} options={options.per_page} onChange={(n) => search(filters, { pp: String(n) })} />
                 </ResultsHead>
                 <Criteria groups={critGroups} />
@@ -175,8 +222,8 @@ export default function Research({ mode }: { mode: Mode }) {
                 <SelectBar onPick={pick} icp={Object.values(icp).some((m) => m.level === 'icp')} email={people} newOnly={people && nLp > 0} nLp={nLp} hide={hideLp} onHide={setHideLp} />
                 {people
                   ? <PeopleTable rows={rows as Person[]} icp={icp} picks={picks} toggle={toggle} roles={roles} setRole={(id, v) => setRoles((m) => ({ ...m, [id]: v }))} roleList={c.profile.roles} onAll={(on) => pick(on ? 'all' : 'none')} />
-                  : <CompaniesTable rows={rows as Org[]} picks={picks} toggle={toggle} onAll={(on) => pick(on ? 'all' : 'none')} onPeople={(d) => nav(peopleAtHref(d))} />}
-                <Pager res={res} onPage={(p) => search(filters, { page: String(p), pp: String(pp) })} />
+                  : <CompaniesTable rows={rows as Org[]} picks={picks} toggle={toggle} onAll={(on) => pick(on ? 'all' : 'none')} onPeople={(o) => peopleAt({ name: o.name, domain: o.domain, id: o.id })} />}
+                <Pager res={res} onPage={(p) => { search(filters, { page: String(p), pp: String(pp) }); window.scrollTo({ top: 0 }); }} />
               </div>
               <div className="pushbar">
                 <PushCount n={nSel} people={people} nEmail={nEmail} left={left} waterfall={c.email_waterfall} />
@@ -199,10 +246,11 @@ export default function Research({ mode }: { mode: Mode }) {
 
 /* ---- the filter rail ---- */
 
-function Rail({ mode, initial, suggestions, onSearch, onClear }: { mode: Mode; initial: Filters; suggestions: string[]; onSearch: (f: Filters) => void; onClear: () => void }) {
+function Rail({ mode, initial, suggestions, onSearch, onClear, onDraft }: { mode: Mode; initial: Filters; suggestions: string[]; onSearch: (f: Filters) => void; onClear: () => void; onDraft: (f: Filters) => void }) {
   const { options } = useApp();
   const people = mode === 'people';
   const [f, setF] = useState<Filters>(initial);
+  useEffect(() => { onDraft(f); }, [f]);
   const set = <K extends keyof Filters>(k: K, v: Filters[K]) => setF((x) => ({ ...x, [k]: v }));
   return (
     <form className="card rail" onSubmit={(e) => { e.preventDefault(); onSearch(f); }}>
@@ -290,7 +338,7 @@ function PeopleTable({ rows, picks, toggle, roles, setRole, roleList, onAll, icp
   );
 }
 
-function CompaniesTable({ rows, picks, toggle, onAll, onPeople }: { rows: Org[]; picks: Set<string>; toggle: (id: string, on: boolean) => void; onAll: (on: boolean) => void; onPeople: (domain: string) => void }) {
+function CompaniesTable({ rows, picks, toggle, onAll, onPeople }: { rows: Org[]; picks: Set<string>; toggle: (id: string, on: boolean) => void; onAll: (on: boolean) => void; onPeople: (o: Org) => void }) {
   return (
     <div className="scroll">
       <table className="rows">
@@ -306,7 +354,7 @@ function CompaniesTable({ rows, picks, toggle, onAll, onPeople }: { rows: Org[];
               <td className="num">{o.revenue ? `$${o.revenue}` : <span className="status">—</span>}</td>
               <td className="num">{o.founded || <span className="status">—</span>}</td>
               <td><div className="links">{o.website && <a className="lnk" href={o.website} target="_blank" rel="noopener" title="Website" aria-label={`${o.name} website`}><Icon name="globe" /></a>}{o.linkedin && <a className="lnk" href={o.linkedin} target="_blank" rel="noopener" title="LinkedIn" aria-label={`${o.name} on LinkedIn`}><Icon name="linkedin" /></a>}{o.phone && <a className="lnk" href={`tel:${o.phone.replace(/[^+\d]/g, '')}`} title={o.phone} aria-label={`Call ${o.name}, ${o.phone}`}><Icon name="phone" /></a>}</div></td>
-              <td className="num rowbtn"><a className="btn secondary sm" onClick={() => onPeople(o.domain)} title={`People at ${o.name}`}><Icon name="people" />People</a></td>
+              <td className="num rowbtn"><button type="button" className="btn secondary sm" onClick={() => onPeople(o)} title={`See the people at ${o.name}`}><Icon name="people" />People</button></td>
             </tr>
           ))}
         </tbody>

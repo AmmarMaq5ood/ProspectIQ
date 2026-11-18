@@ -77,7 +77,7 @@ export async function pushPeople(client: Client, people: Person[], roles: Record
   const results: PushResult[] = [];
   if (!groups.size) return { results, errors: errors.length ? errors : ['None of the ticked people could be looked up.'], credits, spent: 0, waterfall: wf };
   if (!opts.live) {
-    for (const g of groups.values()) results.push({ company: { name: g.org.name, id: '' }, contacts: g.contacts.map((c) => ({ name: `${c.first} ${c.last}`.trim(), role: c.role || '', id: '', new: true, email: c.email })), note_added: true, opportunity: { id: '', name: `${g.org.name} — outreach`, created: true }, log: ['sample mode: nothing written'] });
+    for (const g of groups.values()) results.push({ company: { name: g.org.name, id: '' }, contacts: g.contacts.map((c) => ({ name: `${c.first} ${c.last}`.trim(), role: c.role || '', id: '', rid: c.id, new: true, email: c.email })), note_added: true, opportunity: { id: '', name: `${g.org.name} — outreach`, created: true }, log: ['sample mode: nothing written'] });
     return { results, errors, credits: 0, spent: 0, waterfall: wf };
   }
   const lp = lpOf(client);

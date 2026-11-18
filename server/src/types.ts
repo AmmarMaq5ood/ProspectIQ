@@ -259,7 +259,8 @@ export interface UsageRow {
 
 export interface PushResult {
   company: { name: string; id: string };
-  contacts: { name: string; role: string; id: string; new: boolean; email: string; email_source?: 'research' | 'waterfall'; email_verified?: boolean; priority?: string; icp?: string }[];
+  /** `rid` is the research id of the row the contact came from, so the page can mark that row as now in Launchpad. */
+  contacts: { name: string; role: string; id: string; rid?: string; new: boolean; email: string; email_source?: 'research' | 'waterfall'; email_verified?: boolean; priority?: string; icp?: string }[];
   note_added: boolean;
   opportunity: { id: string; name: string; created: boolean };
   log: string[];
